@@ -14,6 +14,7 @@ remappings = [
     "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
     "@uniswap/v4-core/=lib/v4-core/",
     "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "@uniswap/universal-router/=lib/universal-router/",
     "permit2/=lib/v4-periphery/lib/permit2/",
     "hookmate/=lib/hookmate/src/",
 ]
