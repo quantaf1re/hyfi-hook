@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
 import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
@@ -78,6 +77,7 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     uint internal constant Q96            = 1 << 96;
 
     IPoolManager public pm;
+    mapping(PoolId => PairState) internal _pairState;
 
     struct PairState {
         uint112 bidPriceX96;   // bid price: token1 per token0, scaled by 2^96
@@ -92,7 +92,6 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     error HookNotUsed();
     error LengthMismatch();
 
-    mapping(PoolId => PairState) internal _pairState;
 
     modifier onlyPM() {
         if (msg.sender != address(pm)) revert OnlyPoolManager();
@@ -232,12 +231,12 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
 
     /// @notice Deposit ERC-20 (or native) into PM as ERC6909 claims for this hook.
     ///         For ERC-20: caller must approve this contract.  For native: send msg.value.
-    function deposit(Currency currency, uint amount) external payable onlyOwner {
+    function depositTo6909(Currency currency, uint amount) external payable onlyOwner {
         pm.unlock(abi.encode(true, currency, amount, msg.sender));
     }
 
     /// @notice Withdraw ERC6909 claims back to ERC-20 (or native) to the owner.
-    function withdraw(Currency currency, uint amount) external onlyOwner {
+    function withdrawFrom6909(Currency currency, uint amount) external onlyOwner {
         pm.unlock(abi.encode(false, currency, amount, msg.sender));
     }
 
@@ -259,6 +258,17 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
 
     /// @notice Accept native currency deposits.
     receive() external payable {}
+
+    // -----------------------------------------------------------------------
+    // Owner — rescue tokens sent directly to the hook (not ERC6909 claims)
+    // -----------------------------------------------------------------------
+
+    /// @notice Withdraw ERC-20 or native currency held by the hook contract itself.
+    ///         Use this to rescue tokens mistakenly sent to the hook address
+    ///         (not for ERC6909 claims — use `withdraw` for those).
+    function withdrawToken(Currency currency, uint amount) external onlyOwner {
+        currency.transfer(msg.sender, amount);
+    }
 
     // -----------------------------------------------------------------------
     // View helpers

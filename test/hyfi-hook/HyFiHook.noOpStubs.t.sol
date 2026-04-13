@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
@@ -29,7 +28,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
     function test_beforeInitialize_RevertWhen_called() public {
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.beforeInitialize(address(0), poolKey, 0);
+        hook.beforeInitialize(ADDR_ZERO, poolKey, 0);
     }
 
     // ─── afterInitialize ─────────────────────────────────────────────────
@@ -37,7 +36,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
     function test_afterInitialize_RevertWhen_called() public {
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.afterInitialize(address(0), poolKey, 0, 0);
+        hook.afterInitialize(ADDR_ZERO, poolKey, 0, 0);
     }
 
     // ─── afterAddLiquidity ───────────────────────────────────────────────
@@ -46,7 +45,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
         BalanceDelta emptyDelta;
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.afterAddLiquidity(address(0), poolKey, LIQUIDITY_PARAMS, emptyDelta, emptyDelta, "");
+        hook.afterAddLiquidity(ADDR_ZERO, poolKey, LIQUIDITY_PARAMS, emptyDelta, emptyDelta, "");
     }
 
     // ─── beforeRemoveLiquidity ───────────────────────────────────────────
@@ -54,7 +53,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
     function test_beforeRemoveLiquidity_RevertWhen_called() public {
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.beforeRemoveLiquidity(address(0), poolKey, LIQUIDITY_PARAMS, "");
+        hook.beforeRemoveLiquidity(ADDR_ZERO, poolKey, LIQUIDITY_PARAMS, "");
     }
 
     // ─── afterRemoveLiquidity ────────────────────────────────────────────
@@ -63,7 +62,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
         BalanceDelta emptyDelta;
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.afterRemoveLiquidity(address(0), poolKey, LIQUIDITY_PARAMS, emptyDelta, emptyDelta, "");
+        hook.afterRemoveLiquidity(ADDR_ZERO, poolKey, LIQUIDITY_PARAMS, emptyDelta, emptyDelta, "");
     }
 
     // ─── afterSwap ───────────────────────────────────────────────────────
@@ -73,7 +72,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
         SwapParams memory params = SwapParams({zeroForOne: true, amountSpecified: -100, sqrtPriceLimitX96: 0});
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.afterSwap(address(0), poolKey, params, emptyDelta, "");
+        hook.afterSwap(ADDR_ZERO, poolKey, params, emptyDelta, "");
     }
 
     // ─── beforeDonate ────────────────────────────────────────────────────
@@ -81,7 +80,7 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
     function test_beforeDonate_RevertWhen_called() public {
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.beforeDonate(address(0), poolKey, 0, 0, "");
+        hook.beforeDonate(ADDR_ZERO, poolKey, 0, 0, "");
     }
 
     // ─── afterDonate ─────────────────────────────────────────────────────
@@ -89,6 +88,6 @@ contract HyFiHookNoOpStubsTest is HyFiHookSharedSetup {
     function test_afterDonate_RevertWhen_called() public {
         vm.prank(address(pm));
         vm.expectRevert(HyFiHook.HookNotUsed.selector);
-        hook.afterDonate(address(0), poolKey, 0, 0, "");
+        hook.afterDonate(ADDR_ZERO, poolKey, 0, 0, "");
     }
 }

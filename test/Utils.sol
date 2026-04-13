@@ -1,15 +1,18 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.30;
 
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IUniversalRouter} from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
 import {Commands} from "@uniswap/universal-router/contracts/libraries/Commands.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {console2} from "forge-std/console2.sol";
 
-abstract contract TestUtils {
+abstract contract Utils {
     using CurrencyLibrary for Currency;
 
     uint256 internal constant BASE_FEE       = 500;
@@ -17,6 +20,7 @@ abstract contract TestUtils {
     uint256 internal constant MAX_FEE        = 1_000_000;
     uint256 internal constant FEE_DENOM      = 1_000_000;
     uint256 internal constant Q96            = 1 << 96;
+    address internal constant ADDR_ZERO      = address(0);
 
     function swap(address router, PoolKey memory key, bool zeroForOne, int256 amountSpecified) internal {
         Currency input = zeroForOne ? key.currency0 : key.currency1;
@@ -83,7 +87,7 @@ abstract contract TestUtils {
             commands = abi.encodePacked(uint8(Commands.V4_SWAP), uint8(Commands.SWEEP));
             inputs = new bytes[](2);
             inputs[0] = abi.encode(actions, actionParams);
-            inputs[1] = abi.encode(address(0), address(this), uint256(0));
+            inputs[1] = abi.encode(ADDR_ZERO, address(this), uint256(0));
         } else {
             commands = abi.encodePacked(uint8(Commands.V4_SWAP));
             inputs = new bytes[](1);
@@ -124,5 +128,67 @@ abstract contract TestUtils {
     {
         uint256 beforeFee = FullMath.mulDivRoundingUp(amountOut, priceX96, Q96);
         return FullMath.mulDivRoundingUp(beforeFee, FEE_DENOM, FEE_DENOM - fee);
+    }
+
+    function _mineSalt(bytes memory initcode, uint160 flags, address deployer) internal pure returns (bytes32 salt) {
+        bytes32 initcodeHash = keccak256(initcode);
+        uint256 i;
+        while (true) {
+            salt = bytes32(i);
+            address predicted = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer, salt, initcodeHash))))
+            );
+            if (uint160(predicted) & Hooks.ALL_HOOK_MASK == flags) return salt;
+            ++i;
+        }
+    }
+
+    function getPriceFromSqrtPriceX96(uint160 sqrtPriceX96, bool invertPrice, uint8 decsT0, uint8 decsT1) internal pure returns (uint256 price) {
+        uint256 priceX192 = uint256(sqrtPriceX96) * uint256(sqrtPriceX96);
+        price = Math.mulDiv(priceX192, 1e18, 1 << 192);
+        price = (price * (10 ** decsT0)) / (10 ** decsT1);
+        if (invertPrice) {
+            price = Math.mulDiv(1e18, 1e18, price);
+        }
+    }
+
+    function getSqrtPriceX96FromPrice(uint256 price, bool invertPrice, uint8 decsT0, uint8 decsT1) internal pure returns (uint160) {
+        if (invertPrice) {
+            price = Math.mulDiv(1e18, 1e18, price);
+        }
+        price = (price * (10 ** decsT1)) / (10 ** decsT0);
+        uint256 priceX192 = Math.mulDiv(price, 1 << 192, 1e18);
+        return uint160(Math.sqrt(priceX192));
+    }
+
+    function convAmToOther(uint256 am, uint256 price, uint8 decsOriginal, uint8 decsOutput) internal pure returns (uint256) {
+        return (am * price * (10 ** decsOutput)) / (1e18 * (10 ** decsOriginal));
+    }
+
+    function formatNumToStrDecimal(uint256 amount, uint8 decimals) internal pure returns (string memory) {
+        if (decimals == 0) return Strings.toString(amount);
+        uint256 divisor = 10 ** uint256(decimals);
+        uint256 integerPart = amount / divisor;
+        uint256 fractionalPart = amount % divisor;
+        if (fractionalPart == 0) return Strings.toString(integerPart);
+
+        bytes memory fractionalDigits = bytes(Strings.toString(fractionalPart));
+        bytes memory padded = new bytes(decimals);
+        uint256 leadingZeros = decimals - fractionalDigits.length;
+        for (uint256 i = 0; i < decimals; ++i) {
+            padded[i] = i < leadingZeros ? bytes1("0") : fractionalDigits[i - leadingZeros];
+        }
+
+        uint256 end = decimals;
+        while (end > 0 && padded[end - 1] == bytes1("0")) end--;
+        if (end == 0) return Strings.toString(integerPart);
+
+        bytes memory trimmed = new bytes(end);
+        for (uint256 i = 0; i < end; ++i) trimmed[i] = padded[i];
+        return string(abi.encodePacked(Strings.toString(integerPart), ".", trimmed));
+    }
+
+    function logTokenBal(string memory label, string memory symbol, uint256 amount, uint8 decimals) internal pure {
+        console2.log(string.concat(label, ": ", formatNumToStrDecimal(amount, decimals), " ", symbol));
     }
 }

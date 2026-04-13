@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
@@ -10,15 +9,15 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {HyFiHook} from "../../src/HyFiHook.sol";
-import {TestUtils} from "../Utils.sol";
+import {Utils} from "../Utils.sol";
 
 interface IPermit2Approve {
     function approve(address token, address spender, uint160 amount, uint48 expiration) external;
 }
 
-contract HyFiHookSharedSetup is Test, TestUtils {
+contract HyFiHookSharedSetup is Test, Utils {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
 
@@ -72,11 +71,11 @@ contract HyFiHookSharedSetup is Test, TestUtils {
         // Mine CREATE2 salt so the proxy address has the correct hook-flag bits
         bytes memory initData = abi.encodeCall(HyFiHook.initialize, (address(pm), owner));
         bytes memory proxyInitcode =
-            abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(address(impl), initData));
-        bytes32 salt = _mineSalt(proxyInitcode, HOOK_FLAGS);
+            abi.encodePacked(type(TransparentUpgradeableProxy).creationCode, abi.encode(address(impl), owner, initData));
+        bytes32 salt = _mineSalt(proxyInitcode, HOOK_FLAGS, address(this));
 
         // Deploy proxy (constructor delegates to impl.initialize)
-        ERC1967Proxy proxy = new ERC1967Proxy{salt: salt}(address(impl), initData);
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy{salt: salt}(address(impl), owner, initData);
         hook = HyFiHook(payable(address(proxy)));
 
         // Create pool with dynamic fee and tickSpacing=1
@@ -93,9 +92,9 @@ contract HyFiHookSharedSetup is Test, TestUtils {
         pm.initialize(poolKey, SQRT_PRICE_1_1);
 
         // Fund the hook with ERC6909 claims so it can pay out swaps
-        hook.deposit{value: 1_000 * 10 ** POL_DECIMALS}(c0, 1_000 * 10 ** POL_DECIMALS);
+        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(c0, 1_000 * 10 ** POL_DECIMALS);
         IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.deposit(c1, 1_000 * 10 ** USDC_DECIMALS);
+        hook.depositTo6909(c1, 1_000 * 10 ** USDC_DECIMALS);
 
         // Set a default price
         hook.setPrice(poolId, BID_PRICE_X96, SPREAD_X96);
@@ -103,22 +102,6 @@ contract HyFiHookSharedSetup is Test, TestUtils {
         // Approve Permit2 for USDC (enables Universal Router to pull USDC for swaps)
         IERC20(USDC_ADDR).approve(PERMIT2, type(uint256).max);
         IPermit2Approve(PERMIT2).approve(USDC_ADDR, UNIVERSAL_ROUTER, type(uint160).max, type(uint48).max);
-    }
-
-    // ---- CREATE2 salt mining ---------------------------------------------
-
-    function _mineSalt(bytes memory initcode, uint160 flags) internal view returns (bytes32 salt) {
-        bytes32 initcodeHash = keccak256(initcode);
-        address deployer = address(this);
-        uint256 i;
-        while (true) {
-            salt = bytes32(i);
-            address predicted = address(
-                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer, salt, initcodeHash))))
-            );
-            if (uint160(predicted) & Hooks.ALL_HOOK_MASK == flags) return salt;
-            ++i;
-        }
     }
 
     receive() external payable {}
