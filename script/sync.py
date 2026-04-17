@@ -226,14 +226,18 @@ def sync_price_if_changed(c, bids, asks):
         spread_x96 = ask_x96 - bid_x96
 
     if bid_x96 == c['last_bid_x96'] and spread_x96 == c['last_spread_x96']:
-        logger.debug("Prices unchanged, skipping setPrice")
-        return bid_x96, spread_x96, False
+        elapsed = int(time.time()) - c['last_update_ts']
+        if elapsed < 10:
+            logger.debug(f"Prices unchanged and only {elapsed}s since last update, skipping setPrice")
+            return bid_x96, spread_x96, False
+        logger.info(f"Prices unchanged but {elapsed}s since last update, refreshing setPrice")
 
-    logger.info(
-        f"Prices changed: bid {best_bid_d} ask {best_ask_d} → "
-        f"bidX96={bid_x96} spreadX96={spread_x96}"
-    )
+    else:
+        logger.info(f"Prices changed: bid {best_bid_d} ask {best_ask_d} → "f"bidX96={bid_x96} spreadX96={spread_x96}")
+
     send_tx(hook.functions.setPrice(bytes.fromhex(c['pool_id'][2:]), bid_x96, spread_x96))
+    getPrice_return = hook.functions.getPrice(bytes.fromhex(c['pool_id'][2:])).call()
+    c['last_update_ts'] = getPrice_return[2]
     c['last_bid_x96'] = bid_x96
     c['last_spread_x96'] = spread_x96
     logger.info("setPrice tx confirmed")
@@ -392,6 +396,7 @@ logger.info(f"Pool ID: {c['pool_id']}")
 on_chain = hook.functions.getPrice(bytes.fromhex(c['pool_id'][2:])).call()
 c['last_bid_x96'] = on_chain[0]
 c['last_spread_x96'] = on_chain[1]
+c['last_update_ts'] = on_chain[2]
 logger.info(f"On-chain price: bidX96={on_chain[0]}, spreadX96={on_chain[1]}, lastUpdate={on_chain[2]}")
 
 # Futures symbol info (tick size, step size, min qty)

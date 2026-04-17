@@ -15,4 +15,8 @@ docs/
 .env
 
 venv
+
+# Logs and benchmark data
+script/logs/
+script/benchmark/*.csv
 **__pycache__/

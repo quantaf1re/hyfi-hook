@@ -1,5 +1,21 @@
 BENCHMARK_QUOTER_ABI = """[
   {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "_quoterV2",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_v4Quoter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "function",
     "name": "quoteAll",
     "inputs": [
@@ -44,16 +60,6 @@ BENCHMARK_QUOTER_ABI = """[
             "internalType": "bytes"
           }
         ]
-      },
-      {
-        "name": "quoterV2",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "v4Quoter",
-        "type": "address",
-        "internalType": "address"
       },
       {
         "name": "amtsZeroToOne",
@@ -103,5 +109,31 @@ BENCHMARK_QUOTER_ABI = """[
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "quoterV2",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IQuoterV2"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "v4Quoter",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IV4Quoter"
+      }
+    ],
+    "stateMutability": "view"
   }
 ]"""
