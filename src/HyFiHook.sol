@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
 import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
@@ -14,84 +15,71 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
-import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
+import {ILPQuoter} from "./interfaces/ILPQuoter.sol";
 
-/// @title HyFiHook — Proprietor AMM Hook for Uniswap V4
-/// @notice Single-owner hook that fully overrides UniV4 pricing with owner-set bid/ask
-///         prices that mirror a centralised exchange orderbook.  The owner holds token
-///         inventory as ERC6909 claims inside the PoolManager, sets bid price + spread
-///         per pair, and profits from the spread difference between DEX fees received
-///         and CEX fees paid when hedging.
-///
-/// @dev Pricing model (orderbook pass-through):
-///        The owner provides `bidPriceX96` and `spreadX96` per pool, both in Q96
-///        (token1 per token0, scaled by 2^96).  The effective prices are:
-///          bid = bidPriceX96                     (trader sells token0, buys token1)
-///          ask = bidPriceX96 + spreadX96         (trader buys token0, sells token1)
-///        E.g. if CEX best bid for ETH-USDC is $1 999.99 and best ask is $2 000.01:
-///          bidPriceX96 = 1999.99 * 2^96
-///          spreadX96   = 0.02    * 2^96
-///        On top of the bid/ask spread a staleness fee is added (see below).
-///
-///        "token0" and "token1" follow Uniswap ordering (lower address first).  The
-///        bidPriceX96 is always expressed as token1-per-token0 scaled by 2^96.  If the
-///        CEX pair has the opposite ordering, the off-chain caller must invert the
-///        bid/ask before calling setPrice / setPrices:
-///          bidPriceX96 = 2^192 / cexAskPriceX96   (CEX ask inverts to DEX bid)
-///          askPriceX96 = 2^192 / cexBidPriceX96   (CEX bid inverts to DEX ask)
-///          spreadX96   = askPriceX96 - bidPriceX96
-///
-/// @dev Storage layout — 1 slot (256 bits) per pool (`_pairState[PoolId]`):
-///        uint112 bidPriceX96  — bid price: token1 per token0 * 2^96
-///                              (112 bits; 2^112 ≈ 5.2e33 covers all practical ratios)
-///        uint112 spreadX96    — full bid-ask spread in the same Q96 units
-///                              (ask = bid + spread)
-///        uint32  lastUpdate   — block.timestamp (good until 2106)
-///        Total: 112 + 112 + 32 = 256 bits = 1 storage slot
-///
-/// @dev Fee schedule (units: 1 = 0.0001 %):
-///        base fee       = 500   (0.05 %) — charged when trade is in the same block
-///        per-second     = +100  (0.01 %) — added per second since last price update
-///        cap            = 1 000 000 (100 %) — absolute maximum
-///        Fee denominator = 1 000 000   (so fee=1 000 000 → 100 %)
-///
-/// @dev Hook flags required on the **proxy** address (lowest 14 bits):
-///        BEFORE_ADD_LIQUIDITY      (1 << 11)
-///        BEFORE_SWAP               (1 << 7)
-///        BEFORE_SWAP_RETURNS_DELTA (1 << 3)
-///
-/// @dev Pool initialisation: use fee = 0x800000 (DYNAMIC_FEE_FLAG), any valid
-///      tickSpacing (e.g. 1), and any sqrtPriceX96 (unused — pricing is fully
-///      overridden by this hook).
+
+/// @title HyFiHook — Multi-LP Proprietor AMM Hook for Uniswap V4
+/// @notice Whitelisted MMs register with their own Quoter contracts that define
+///         fee logic and inventory management.  The hook stores centralised
+///         price data (bid + spread) per pool that the owner updates off-chain.
+///         On each swap the hook iterates registered quoters, passes in the
+///         current price, picks the best effective price for the trader, and
+///         fills against that MM's inventory.
 contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable, ReentrancyGuardTransient {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
 
-    uint internal constant BASE_FEE       = 500;          // 0.05 %
-    uint internal constant FEE_PER_SECOND = 100;          // +0.01 % per second
-    uint internal constant MAX_FEE        = 1_000_000;    // 100 % cap
-    uint internal constant FEE_DENOM      = 1_000_000;
-    uint internal constant Q96            = 1 << 96;
+    uint8  internal constant MAX_LPS          = 10;
+    uint   internal constant QUOTER_GAS_LIMIT = 100_000;
+    uint   internal constant FEE_DENOM        = 1_000_000;  // 1 000 000 = 100 %
 
     IPoolManager public pm;
-    mapping(PoolId => PairState) internal _pairState;
+    uint public protocolFeePips;  // fee in FEE_DENOM pips (e.g. 1000 = 0.1%)
 
-    struct PairState {
-        uint112 bidPriceX96;   // bid price: token1 per token0, scaled by 2^96
-        uint112 spreadX96;     // full bid-ask spread in Q96 (ask = bid + spread)
-        uint32  lastUpdate;    // block.timestamp of last price update
+    // --- MM registry (per-pool) ----------------------------------------------
+    struct LP {
+        address   mm;
+        ILPQuoter quoter;
     }
 
-    error OnlyPoolManager();
-    error PairNotRegistered();
-    error NoDirectLiquidity();
-    error ZeroOutput();
-    error HookNotUsed();
-    error LengthMismatch();
+    mapping(PoolId => LP[])                          internal _poolMMs;
+    mapping(PoolId => mapping(address => uint8))     internal _poolMMIndex; // 1-indexed
+    mapping(address => bool)                         public   whitelisted;
 
+    // --- LP sub-accounting (hook's aggregate ERC6909 split per LP) -----------
+    mapping(address lp => mapping(Currency => uint256)) public lpBalances;
+
+    // --- Centralised price data (owner-updated) ------------------------------
+    struct PriceData {
+        uint112 bidPriceX96;
+        uint112 spreadX96;
+        uint32  lastUpdate;
+    }
+
+    mapping(PoolId => PriceData) internal _prices;
+
+    // --- Protocol fee accumulator (owner's share) ----------------------------
+    mapping(Currency => uint256) public protocolFees;
+
+    // --- Errors --------------------------------------------------------------
+    error OnlyPoolManager();
+    error NoDirectLiquidity();
+    error HookNotUsed();
+    error NotWhitelisted();
+    error AlreadyRegistered();
+    error NotRegistered();
+    error MaxLPsReached();
+    error NoQuoteAvailable();
+    error InsufficientBalance();
+    error BadQuoteInput();
+    error BadQuoteOutput();
+    error FeeTooHigh();
+    error PairNotRegistered();
+    error LengthMismatch();
+    error NoFeesToCollect();
 
     modifier onlyPM() {
         if (msg.sender != address(pm)) revert OnlyPoolManager();
@@ -108,41 +96,148 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     }
 
     // -----------------------------------------------------------------------
-    // Owner — price updates  (gas-critical path)
+    // Owner — whitelist management
     // -----------------------------------------------------------------------
 
-    /// @notice Set price for one pair.  Costs 1 SSTORE + base tx.
-    /// @param poolId        PoolId of the pair (keccak256 of the PoolKey).
-    /// @param bidPriceX96   Bid price: token1-per-token0 scaled by 2^96 (112-bit max).
-    ///                      This is the price at which the hook buys token0 (trader sells).
-    ///                      NOTE: if the CEX pair has the inverse ordering (e.g. CEX quotes
-    ///                      token0-per-token1), the off-chain caller must invert:
-    ///                      `bidPriceX96 = 2^192 / cexAskPriceX96`.
-    /// @param spreadX96     Full bid-ask spread in the same Q96 units.  ask = bid + spread.
-    ///                      E.g. if bid = 0.09999 and ask = 0.10001 (in token1/token0),
-    ///                      spreadX96 = 0.00002 * 2^96.
-    function setPrice(PoolId poolId, uint112 bidPriceX96, uint112 spreadX96) external onlyOwner {
-        _pairState[poolId] = PairState(bidPriceX96, spreadX96, uint32(block.timestamp));
+    function addToWhitelist(address mm) external onlyOwner {
+        whitelisted[mm] = true;
     }
 
-    /// @notice Batch-set prices.  N SSTOREs, one timestamp read.
-    // Could revert if empty arrays but it's extra gas to check and empty arrays don't do anything anyway
+    function removeFromWhitelist(address mm) external onlyOwner {
+        whitelisted[mm] = false;
+    }
+
+    function setProtocolFee(uint newFeePips) external onlyOwner {
+        if (newFeePips > FEE_DENOM) revert FeeTooHigh();
+        protocolFeePips = newFeePips;
+    }
+
+    function collectProtocolFees(Currency currency) external onlyOwner {
+        uint amount = protocolFees[currency];
+        if (amount == 0) revert NoFeesToCollect();
+        protocolFees[currency] = 0;
+        pm.unlock(abi.encode(false, currency, amount, msg.sender));
+    }
+
+    // -----------------------------------------------------------------------
+    // Owner — price updates
+    // -----------------------------------------------------------------------
+
     function setPrices(
         PoolId[] calldata poolIds,
         uint112[] calldata bidPrices,
         uint112[] calldata spreads
     ) external onlyOwner {
-        if (poolIds.length != bidPrices.length || poolIds.length != spreads.length) {
+        if (poolIds.length != bidPrices.length || poolIds.length != spreads.length)
             revert LengthMismatch();
-        }
         uint32 ts = uint32(block.timestamp);
         for (uint i; i < poolIds.length; ++i) {
-            _pairState[poolIds[i]] = PairState(bidPrices[i], spreads[i], ts);
+            _prices[poolIds[i]] = PriceData(bidPrices[i], spreads[i], ts);
         }
     }
 
+    function getPrices(PoolId poolId) external view returns (uint112, uint112, uint32) {
+        PriceData storage p = _prices[poolId];
+        return (p.bidPriceX96, p.spreadX96, p.lastUpdate);
+    }
+
+    // -----------------------------------------------------------------------
+    // MM — registration (per-pool)
+    // -----------------------------------------------------------------------
+
+    function registerPools(PoolId[] calldata poolIds, ILPQuoter[] calldata quoters) external {
+        if (!whitelisted[msg.sender]) revert NotWhitelisted();
+        if (poolIds.length != quoters.length) revert LengthMismatch();
+        for (uint i; i < poolIds.length; ++i) {
+            PoolId pid = poolIds[i];
+            if (_poolMMIndex[pid][msg.sender] != 0) revert AlreadyRegistered();
+            if (_poolMMs[pid].length >= MAX_LPS) revert MaxLPsReached();
+            _poolMMs[pid].push(LP(msg.sender, quoters[i]));
+            _poolMMIndex[pid][msg.sender] = uint8(_poolMMs[pid].length);
+        }
+    }
+
+    function deregisterPools(PoolId[] calldata poolIds) external {
+        for (uint i; i < poolIds.length; ++i) {
+            _deregister(poolIds[i], msg.sender);
+        }
+    }
+
+    function ownerDeregister(PoolId[] calldata poolIds, address mm) external onlyOwner {
+        for (uint i; i < poolIds.length; ++i) {
+            _deregister(poolIds[i], mm);
+        }
+    }
+
+    function _deregister(PoolId poolId, address mm) internal {
+        uint8 idx1 = _poolMMIndex[poolId][mm];
+        if (idx1 == 0) revert NotRegistered();
+
+        uint idx     = uint(idx1) - 1;
+        uint lastIdx = _poolMMs[poolId].length - 1;
+
+        if (idx != lastIdx) {
+            LP storage last = _poolMMs[poolId][lastIdx];
+            _poolMMs[poolId][idx] = last;
+            _poolMMIndex[poolId][last.mm] = idx1;
+        }
+        _poolMMs[poolId].pop();
+        delete _poolMMIndex[poolId][mm];
+    }
+
+    function updateQuoters(PoolId[] calldata poolIds, ILPQuoter[] calldata newQuoters) external {
+        if (poolIds.length != newQuoters.length) revert LengthMismatch();
+        for (uint i; i < poolIds.length; ++i) {
+            uint8 idx1 = _poolMMIndex[poolIds[i]][msg.sender];
+            if (idx1 == 0) revert NotRegistered();
+            _poolMMs[poolIds[i]][uint(idx1) - 1].quoter = newQuoters[i];
+        }
+    }
+
+    function getMMCount(PoolId poolId) external view returns (uint) {
+        return _poolMMs[poolId].length;
+    }
+
+    function getMM(PoolId poolId, uint index) external view returns (address mm, address quoter) {
+        LP storage lp = _poolMMs[poolId][index];
+        return (lp.mm, address(lp.quoter));
+    }
+
+    // -----------------------------------------------------------------------
+    // LP — deposit / withdraw ERC6909 inventory
+    // -----------------------------------------------------------------------
+
+    function deposit(Currency currency, uint amount) external payable {
+        if (!whitelisted[msg.sender]) revert NotWhitelisted();
+        lpBalances[msg.sender][currency] += amount;
+        pm.unlock(abi.encode(true, currency, amount, msg.sender));
+    }
+
+    function withdraw(Currency currency, uint amount) external {
+        if (lpBalances[msg.sender][currency] < amount) revert InsufficientBalance();
+        lpBalances[msg.sender][currency] -= amount;
+        pm.unlock(abi.encode(false, currency, amount, msg.sender));
+    }
+
+    /// @inheritdoc IUnlockCallback
+    function unlockCallback(bytes calldata data) external override onlyPM returns (bytes memory) {
+        (bool isDeposit, Currency currency, uint amount, address mm) =
+            abi.decode(data, (bool, Currency, uint, address));
+
+        if (isDeposit) {
+            currency.settle(pm, mm, amount, false);
+            currency.take(pm, address(this), amount, true);
+        } else {
+            currency.settle(pm, address(this), amount, true);
+            currency.take(pm, mm, amount, false);
+        }
+        return "";
+    }
+
+    receive() external payable {}
+
     // =======================================================================
-    //  IHooks — beforeSwap  (core pricing logic)
+    //  IHooks — beforeSwap  (iterate quoters, pick best, execute)
     // =======================================================================
 
     function beforeSwap(
@@ -151,234 +246,160 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
         SwapParams calldata params,
         bytes calldata
     ) external override onlyPM nonReentrant returns (bytes4, BeforeSwapDelta, uint24) {
-        PairState memory p = _pairState[key.toId()];
+        int128 unspecDelta = _findAndExecuteBest(key, params);
+        return (
+            IHooks.beforeSwap.selector,
+            toBeforeSwapDelta(int128(-params.amountSpecified), unspecDelta),
+            0
+        );
+    }
+
+    function _findAndExecuteBest(
+        PoolKey calldata key,
+        SwapParams calldata params
+    ) internal returns (int128 unspecDelta) {
+        bool exactIn = params.amountSpecified < 0;
+        Currency inputCurrency  = params.zeroForOne ? key.currency0 : key.currency1;
+        Currency outputCurrency = params.zeroForOne ? key.currency1 : key.currency0;
+        PoolId poolId = key.toId();
+
+        (uint bestInput, uint bestOutput, uint bestIdx) = _findBestQuote(key, poolId, params.zeroForOne, params.amountSpecified, outputCurrency);
+
+        // Validate the winning quote matches PM delta conventions
+        if (exactIn) {
+            if (bestInput != uint(-params.amountSpecified)) revert BadQuoteInput();
+        } else {
+            if (bestOutput != uint(params.amountSpecified)) revert BadQuoteOutput();
+        }
+
+        // Update winning MM's sub-ledger
+        address mm = _poolMMs[poolId][bestIdx].mm;
+
+        // Protocol fee: taken from the input side
+        uint feePips = protocolFeePips;
+        uint protocolCut;
+        if (feePips > 0) {
+            protocolCut = bestInput * feePips / FEE_DENOM;
+            protocolFees[inputCurrency] += protocolCut;
+        }
+
+        lpBalances[mm][inputCurrency]  += bestInput - protocolCut;
+        lpBalances[mm][outputCurrency] -= bestOutput;
+
+        // Move ERC6909 claims in the PoolManager
+        inputCurrency.take(pm, address(this), bestInput, true);
+        outputCurrency.settle(pm, address(this), bestOutput, true);
+
+        unspecDelta = exactIn
+            // forge-lint: disable-next-line(unsafe-typecast)
+            ? -int128(uint128(bestOutput))
+            // forge-lint: disable-next-line(unsafe-typecast)
+            :  int128(uint128(bestInput));
+    }
+
+    /// @dev Pure scan — STATICCALL each quoter, track the best.
+    function _findBestQuote(
+        PoolKey calldata key,
+        PoolId poolId,
+        bool zeroForOne,
+        int256 amountSpecified,
+        Currency outputCurrency
+    ) internal view returns (uint bestInput, uint bestOutput, uint bestIdx) {
+        PriceData memory p = _prices[poolId];
         if (p.bidPriceX96 == 0) revert PairNotRegistered();
 
-        int128 unspecDelta = _executeSwap(key, params, p);
+        bool exactIn = amountSpecified < 0;
+        bestInput = type(uint256).max;
 
-        return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(-params.amountSpecified), unspecDelta), 0);
-    }
+        LP[] storage mms = _poolMMs[poolId];
+        uint len = mms.length;
+        for (uint i; i < len; ++i) {
+            try mms[i].quoter.quoteTrade{gas: QUOTER_GAS_LIMIT}(
+                key, zeroForOne, amountSpecified,
+                uint256(p.bidPriceX96), uint256(p.spreadX96), p.lastUpdate
+            ) returns (uint256 amIn, uint256 amOut) {
+                if (amOut == 0) continue;
 
-    /// @dev Compute swap, derive bid/ask from state, move tokens.  Kept as a
-    ///      separate internal function to avoid stack-too-deep in beforeSwap.
-    function _executeSwap(
-        PoolKey calldata key,
-        SwapParams calldata params,
-        PairState memory p
-    ) internal returns (int128 unspecDelta) {
-        // Effective price: bid when selling token0 (zeroForOne=true),
-        // ask when buying token0 (zeroForOne=false).
-        // priceX96 is token1-per-token0.
-        //   Selling token0 (zeroForOne=true):  trader receives bid (no extra math)
-        //   Buying  token0 (zeroForOne=false): trader pays     ask = bid + spread
-        uint effectivePriceX96 = params.zeroForOne ? uint(p.bidPriceX96) : uint(p.bidPriceX96) + uint(p.spreadX96);
 
-        uint amInput;
-        uint amOutput;
-        (amInput, amOutput, unspecDelta) = _computeSwap(params, effectivePriceX96, _fee(p.lastUpdate));
+                // TODO: remove this to save gas
 
-        // input  = what the swapper sends  → mint claims (keep in PM)
-        // output = what the swapper gets   → burn claims (pay from PM balance)
-        (Currency input, Currency output) = params.zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
-        input.take(pm, address(this), amInput, true);
-        output.settle(pm, address(this), amOutput, true);
-    }
+                
+                if (lpBalances[mms[i].mm][outputCurrency] < amOut) continue;
 
-    /// @dev Swap math — all rounding favours the hook (more input, less output).
-    /// @param params       Swap parameters from the PoolManager.
-    /// @param priceX96     Effective bid or ask price (token1/token0 * 2^96).
-    /// @param fee          Fee in FEE_DENOM units (1 000 000 = 100 %).
-    function _computeSwap(
-        SwapParams calldata params,
-        uint priceX96,
-        uint fee
-    ) internal pure returns (uint inputAmount, uint outputAmount, int128 unspecifiedDelta) {
-        if (params.amountSpecified < 0) {
-            // ---- exact input ------------------------------------------------
-            inputAmount = uint(-params.amountSpecified);
-
-            // Apply fee: inputAfterFee = input * (DENOM - fee) / DENOM  (round DOWN → less for trader)
-            uint inputAfterFee = inputAmount * (FEE_DENOM - fee) / FEE_DENOM;
-
-            // Convert: round DOWN output (favours hook)
-            outputAmount = params.zeroForOne
-                ? FullMath.mulDiv(inputAfterFee, priceX96, Q96)        // selling token0 → get token1
-                : FullMath.mulDiv(inputAfterFee, Q96, priceX96);       // selling token1 → get token0
-
-            if (outputAmount == 0) revert ZeroOutput();
-            // forge-lint: disable-next-line(unsafe-typecast)
-            unspecifiedDelta = -int128(uint128(outputAmount));          // negative = PM pays trader
-        } else {
-            // ---- exact output -----------------------------------------------
-            outputAmount = uint(params.amountSpecified);
-
-            // Inverse conversion: round UP input (favours hook)
-            uint inputBeforeFee = params.zeroForOne
-                ? FullMath.mulDivRoundingUp(outputAmount, Q96, priceX96)
-                : FullMath.mulDivRoundingUp(outputAmount, priceX96, Q96);
-
-            // Gross-up for fee: input = inputBeforeFee * DENOM / (DENOM - fee)  (round UP)
-            inputAmount = FullMath.mulDivRoundingUp(inputBeforeFee, FEE_DENOM, FEE_DENOM - fee);
-
-            // forge-lint: disable-next-line(unsafe-typecast)
-            unspecifiedDelta = int128(uint128(inputAmount));            // positive = PM takes from trader
+                if (exactIn) {
+                    if (amOut > bestOutput) {
+                        bestOutput = amOut;
+                        bestInput  = amIn;
+                        bestIdx    = i;
+                    }
+                } else {
+                    if (amIn < bestInput) {
+                        bestInput  = amIn;
+                        bestOutput = amOut;
+                        bestIdx    = i;
+                    }
+                }
+            } catch {
+                continue;
+            }
         }
+
+        if (bestInput == type(uint256).max) revert NoQuoteAvailable();
     }
 
     // -----------------------------------------------------------------------
-    // Owner — deposit / withdraw inventory  (ERC6909 claims in PM)
+    // Owner — rescue tokens sent directly to the hook
     // -----------------------------------------------------------------------
 
-    /// @notice Deposit ERC-20 (or native) into PM as ERC6909 claims for this hook.
-    ///         For ERC-20: caller must approve this contract.  For native: send msg.value.
-    function depositTo6909(Currency currency, uint amount) external payable onlyOwner {
-        pm.unlock(abi.encode(true, currency, amount, msg.sender));
-    }
-
-    /// @notice Withdraw ERC6909 claims back to ERC-20 (or native) to the owner.
-    function withdrawFrom6909(Currency currency, uint amount) external onlyOwner {
-        pm.unlock(abi.encode(false, currency, amount, msg.sender));
-    }
-
-    /// @inheritdoc IUnlockCallback
-    function unlockCallback(bytes calldata data) external override onlyPM returns (bytes memory) {
-        (bool isDeposit, Currency currency, uint amount, address who) = abi.decode(data, (bool, Currency, uint, address));
-
-        if (isDeposit) {
-            // Pull ERC-20 from `who` (or use hook's native balance) into PM, mint claims to hook
-            currency.settle(pm, who, amount, false);
-            currency.take(pm, address(this), amount, true);
-        } else {
-            // Burn hook's claims, send ERC-20 (or native) to `who`
-            currency.settle(pm, address(this), amount, true);
-            currency.take(pm, who, amount, false);
-        }
-        return "";
-    }
-
-    /// @notice Accept native currency deposits.
-    receive() external payable {}
-
-    // -----------------------------------------------------------------------
-    // Owner — rescue tokens sent directly to the hook (not ERC6909 claims)
-    // -----------------------------------------------------------------------
-
-    /// @notice Withdraw ERC-20 or native currency held by the hook contract itself.
-    ///         Use this to rescue tokens mistakenly sent to the hook address
-    ///         (not for ERC6909 claims — use `withdraw` for those).
     function withdrawToken(Currency currency, uint amount) external onlyOwner {
         currency.transfer(msg.sender, amount);
     }
 
-    // -----------------------------------------------------------------------
-    // View helpers
-    // -----------------------------------------------------------------------
+    // =======================================================================
+    //  Hook permissions & stubs
+    // =======================================================================
 
-    function getPrice(PoolId poolId) external view returns (uint112 bidPriceX96, uint112 spreadX96, uint32 lastUpdate) {
-        PairState storage p = _pairState[poolId];
-        return (p.bidPriceX96, p.spreadX96, p.lastUpdate);
-    }
-
-    function getFee(PoolId poolId) external view returns (uint) {
-        return _fee(_pairState[poolId].lastUpdate);
-    }
-
-    /// @dev Compute the dynamic fee based on staleness.
-    ///      Fee units: 1 = 0.0001 %.  FEE_DENOM (1 000 000) = 100 %.
-    function _fee(uint32 lastUpdate) internal view returns (uint fee) {
-        uint elapsed = block.timestamp - uint(lastUpdate);
-        uint f = BASE_FEE + elapsed * FEE_PER_SECOND;
-        fee = f > MAX_FEE ? MAX_FEE : f;
-    }
-
-    /// @notice Declared permissions — use to derive the required proxy address.
     function getHookPermissions() public pure returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize:                 false,
             afterInitialize:                  false,
-            beforeAddLiquidity:               true,   // block external LPs
+            beforeAddLiquidity:               true,
             afterAddLiquidity:                false,
             beforeRemoveLiquidity:            false,
             afterRemoveLiquidity:             false,
-            beforeSwap:                       true,   // override pricing
+            beforeSwap:                       true,
             afterSwap:                        false,
             beforeDonate:                     false,
             afterDonate:                      false,
-            beforeSwapReturnDelta:            true,   // return custom deltas
+            beforeSwapReturnDelta:            true,
             afterSwapReturnDelta:             false,
             afterAddLiquidityReturnDelta:     false,
             afterRemoveLiquidityReturnDelta:  false
         });
     }
 
-    // =======================================================================
-    //  IHooks — block external liquidity
-    // =======================================================================
-
     function beforeAddLiquidity(
-        address,
-        PoolKey calldata,
-        ModifyLiquidityParams calldata,
-        bytes calldata
+        address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata
     ) external view override onlyPM returns (bytes4) {
         revert NoDirectLiquidity();
     }
 
-    // =======================================================================
-    //  IHooks — no-op stubs
-    //  Flags for these hooks are NOT set, so the PoolManager should never call
-    //  them.  If called unexpectedly, revert to fail fast.
-    // =======================================================================
-
     function beforeInitialize(address, PoolKey calldata, uint160)
-        external pure override returns (bytes4)
-    {
-        revert HookNotUsed();
-    }
-
+        external pure override returns (bytes4) { revert HookNotUsed(); }
     function afterInitialize(address, PoolKey calldata, uint160, int24)
-        external pure override returns (bytes4)
-    {
-        revert HookNotUsed();
-    }
-
-    function afterAddLiquidity(
-        address, PoolKey calldata, ModifyLiquidityParams calldata,
-        BalanceDelta, BalanceDelta, bytes calldata
-    ) external pure override returns (bytes4, BalanceDelta) {
-        revert HookNotUsed();
-    }
-
-    function beforeRemoveLiquidity(
-        address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata
-    ) external pure override returns (bytes4) {
-        revert HookNotUsed();
-    }
-
-    function afterRemoveLiquidity(
-        address, PoolKey calldata, ModifyLiquidityParams calldata,
-        BalanceDelta, BalanceDelta, bytes calldata
-    ) external pure override returns (bytes4, BalanceDelta) {
-        revert HookNotUsed();
-    }
-
-    function afterSwap(
-        address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata
-    ) external pure override returns (bytes4, int128) {
-        revert HookNotUsed();
-    }
-
+        external pure override returns (bytes4) { revert HookNotUsed(); }
+    function afterAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
+        external pure override returns (bytes4, BalanceDelta) { revert HookNotUsed(); }
+    function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        external pure override returns (bytes4) { revert HookNotUsed(); }
+    function afterRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
+        external pure override returns (bytes4, BalanceDelta) { revert HookNotUsed(); }
+    function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+        external pure override returns (bytes4, int128) { revert HookNotUsed(); }
     function beforeDonate(address, PoolKey calldata, uint, uint, bytes calldata)
-        external pure override returns (bytes4)
-    {
-        revert HookNotUsed();
-    }
-
+        external pure override returns (bytes4) { revert HookNotUsed(); }
     function afterDonate(address, PoolKey calldata, uint, uint, bytes calldata)
-        external pure override returns (bytes4)
-    {
-        revert HookNotUsed();
-    }
+        external pure override returns (bytes4) { revert HookNotUsed(); }
 
-    uint[48] private __gap;
+    uint[45] private __gap;
 }

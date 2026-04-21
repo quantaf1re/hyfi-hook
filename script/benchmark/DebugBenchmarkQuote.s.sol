@@ -61,7 +61,7 @@ contract DebugBenchmarkQuote is Script, Utils {
         console2.log("hook 6909 bal1: %e", bal1);
 
         // --- Hook price state ---
-        (uint112 bidPriceX96, uint112 spreadX96, uint32 lastUpdate) = hook.getPrice(id);
+        (uint112 bidPriceX96, uint112 spreadX96, uint32 lastUpdate) = hook.getPrices(id);
         console2.log("\n=== Hook Price State ===");
         console2.log("bidPriceX96:", uint256(bidPriceX96));
         console2.log("spreadX96:", uint256(spreadX96));

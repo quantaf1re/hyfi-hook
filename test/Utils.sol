@@ -11,8 +11,13 @@ import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {console2} from "forge-std/console2.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {HyFiHook} from "../src/HyFiHook.sol";
+import {ILPQuoter} from "../src/interfaces/ILPQuoter.sol";
 
 abstract contract Utils {
+    Vm private constant _cheats = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     using CurrencyLibrary for Currency;
 
     uint256 internal constant BASE_FEE       = 500;
@@ -190,5 +195,31 @@ abstract contract Utils {
 
     function logTokenBal(string memory label, string memory symbol, uint256 amount, uint8 decimals) internal pure {
         console2.log(string.concat(label, ": ", formatNumToStrDecimal(amount, decimals), " ", symbol));
+    }
+
+    function setPricesSingle(HyFiHook hook_, PoolId pid, uint112 bid, uint112 spread) internal {
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = pid;
+        uint112[] memory bids = new uint112[](1);
+        bids[0] = bid;
+        uint112[] memory spreads = new uint112[](1);
+        spreads[0] = spread;
+        hook_.setPrices(pids, bids, spreads);
+    }
+
+    function registerMM(HyFiHook hook_, address mm, PoolId pid, ILPQuoter q) internal {
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = pid;
+        ILPQuoter[] memory quoters = new ILPQuoter[](1);
+        quoters[0] = q;
+        _cheats.prank(mm);
+        hook_.registerPools(pids, quoters);
+    }
+
+    function deregisterMM(HyFiHook hook_, address mm, PoolId pid) internal {
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = pid;
+        _cheats.prank(mm);
+        hook_.deregisterPools(pids);
     }
 }

@@ -1,7 +1,7 @@
 pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
-import {HyFiHookSharedSetup} from "./HyFiHookSharedSetup.sol";
+import {HyFiHookSharedSetup} from "../HyFiHookSharedSetup.sol";
 import {HyFiHook} from "../../src/HyFiHook.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";

@@ -10,8 +10,10 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-import {HyFiHook} from "../../src/HyFiHook.sol";
-import {Utils} from "../Utils.sol";
+import {HyFiHook} from "../src/HyFiHook.sol";
+import {SimpleQuoter} from "../src/SimpleQuoter.sol";
+import {ILPQuoter} from "../src/interfaces/ILPQuoter.sol";
+import {Utils} from "./Utils.sol";
 
 interface IPermit2Approve {
     function approve(address token, address spender, uint160 amount, uint48 expiration) external;
@@ -30,7 +32,6 @@ contract HyFiHookSharedSetup is Test, Utils {
     // ---- constants -------------------------------------------------------
     uint160 internal constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
-    // Token decimals
     uint8 internal constant POL_DECIMALS  = 18;
     uint8 internal constant USDC_DECIMALS = 6;
 
@@ -43,23 +44,33 @@ contract HyFiHookSharedSetup is Test, Utils {
     // 1% spread in Q96
     uint112 internal constant SPREAD_X96 = uint112(Q96 / 1e15);
 
+    // Default protocol fee: 0.01% (100 pips out of 1_000_000)
+    uint256 internal constant DEFAULT_PROTOCOL_FEE_PIPS = 100;
+
+    // Default SimpleQuoter fee parameters
+    uint256 internal constant DEFAULT_BASE_FEE       = 500;  // 0.05%
+    uint256 internal constant DEFAULT_FEE_PER_SECOND = 100;  // +0.01%/s
+
     // ---- state -----------------------------------------------------------
     IPoolManager public pm = IPoolManager(POLYGON_PM);
-    Currency internal c0;
-    Currency internal c1;
-    HyFiHook public hook;
-    PoolKey  public poolKey;
-    PoolId   public poolId;
-    address  public owner;
+    Currency internal native;
+    Currency internal usdc;
+    HyFiHook     public hook;
+    SimpleQuoter  public quoter;
+    PoolKey       public poolKey;
+    PoolId        public poolId;
+    address       public owner;
+    address       public mm1;
 
     // ---- setup -----------------------------------------------------------
 
     function sharedSetup() internal {
         owner = address(this);
+        mm1   = makeAddr("mm1");
 
         // Native POL (address(0)) < any ERC-20 address
-        c0 = CurrencyLibrary.ADDRESS_ZERO;
-        c1 = Currency.wrap(USDC_ADDR);
+        native = CurrencyLibrary.ADDRESS_ZERO;
+        usdc = Currency.wrap(USDC_ADDR);
 
         // Fund test contract
         vm.deal(address(this), 1_000_000 * 10 ** POL_DECIMALS);
@@ -70,18 +81,20 @@ contract HyFiHookSharedSetup is Test, Utils {
 
         // Mine CREATE2 salt so the proxy address has the correct hook-flag bits
         bytes memory initData = abi.encodeCall(HyFiHook.initialize, (address(pm), owner));
-        bytes memory proxyInitcode =
-            abi.encodePacked(type(TransparentUpgradeableProxy).creationCode, abi.encode(address(impl), owner, initData));
+        bytes memory proxyInitcode = abi.encodePacked(type(TransparentUpgradeableProxy).creationCode, abi.encode(address(impl), owner, initData));
         bytes32 salt = _mineSalt(proxyInitcode, HOOK_FLAGS, address(this));
 
-        // Deploy proxy (constructor delegates to impl.initialize)
+        // Deploy proxy
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy{salt: salt}(address(impl), owner, initData);
         hook = HyFiHook(payable(address(proxy)));
 
-        // Create pool with dynamic fee and tickSpacing=1
+        // Deploy SimpleQuoter for mm1
+        quoter = new SimpleQuoter(mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+
+        // Create pool
         poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
+            currency0: native,
+            currency1: usdc,
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 1,
             hooks: IHooks(address(hook))
@@ -91,13 +104,38 @@ contract HyFiHookSharedSetup is Test, Utils {
         // Initialize the pool in the PM
         pm.initialize(poolKey, SQRT_PRICE_1_1);
 
-        // Fund the hook with ERC6909 claims so it can pay out swaps
-        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(c0, 1_000 * 10 ** POL_DECIMALS);
+        // Whitelist mm1 and register it for the pool
+        hook.addToWhitelist(mm1);
+
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = poolId;
+        ILPQuoter[] memory quoters = new ILPQuoter[](1);
+        quoters[0] = ILPQuoter(address(quoter));
+
+        vm.prank(mm1);
+        hook.registerPools(pids, quoters);
+
+        // Fund mm1 with tokens, then deposit into hook
+        vm.deal(mm1, 1_000_000 * 10 ** POL_DECIMALS);
+        deal(USDC_ADDR, mm1, 1_000_000 * 10 ** USDC_DECIMALS);
+
+        vm.startPrank(mm1);
+        hook.deposit{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
         IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.depositTo6909(c1, 1_000 * 10 ** USDC_DECIMALS);
+        hook.deposit(usdc, 1_000 * 10 ** USDC_DECIMALS);
+        vm.stopPrank();
 
         // Set a default price
-        hook.setPrice(poolId, BID_PRICE_X96, SPREAD_X96);
+        PoolId[] memory priceIds = new PoolId[](1);
+        priceIds[0] = poolId;
+        uint112[] memory bids = new uint112[](1);
+        bids[0] = BID_PRICE_X96;
+        uint112[] memory spreads = new uint112[](1);
+        spreads[0] = SPREAD_X96;
+        hook.setPrices(priceIds, bids, spreads);
+
+        // Set default protocol fee to 0.01%
+        hook.setProtocolFee(DEFAULT_PROTOCOL_FEE_PIPS);
 
         // Approve Permit2 for USDC (enables Universal Router to pull USDC for swaps)
         IERC20(USDC_ADDR).approve(PERMIT2, type(uint256).max);
