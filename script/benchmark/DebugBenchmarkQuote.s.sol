@@ -61,17 +61,19 @@ contract DebugBenchmarkQuote is Script, Utils {
         console2.log("hook 6909 bal1: %e", bal1);
 
         // --- Hook price state ---
-        (uint112 bidPriceX96, uint112 spreadX96, uint32 lastUpdate) = hook.getPrices(id);
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = id;
+        HyFiHook.PriceData memory price = hook.getPrices(pids)[0];
         console2.log("\n=== Hook Price State ===");
-        console2.log("bidPriceX96:", uint256(bidPriceX96));
-        console2.log("spreadX96:", uint256(spreadX96));
-        console2.log("lastUpdate:", uint256(lastUpdate));
-        if (bidPriceX96 > 0) {
+        console2.log("bidPriceX96:", uint256(price.bidPriceX96));
+        console2.log("spreadX96:", uint256(price.spreadX96));
+        console2.log("lastUpdate:", uint256(price.lastUpdate));
+        if (price.bidPriceX96 > 0) {
             // price = bidPriceX96 / 2^96  (token1 per token0)
             // Use 1e18 scaling for display: price_e18 = bidPriceX96 * 1e18 / 2^96
-            uint256 priceE18 = uint256(bidPriceX96) * 1e18 / (1 << 96);
+            uint256 priceE18 = uint256(price.bidPriceX96) * 1e18 / (1 << 96);
             console2.log("bid price (token1/token0, 18dp): %e", priceE18);
-            uint256 askE18 = (uint256(bidPriceX96) + uint256(spreadX96)) * 1e18 / (1 << 96);
+            uint256 askE18 = (uint256(price.bidPriceX96) + uint256(price.spreadX96)) * 1e18 / (1 << 96);
             console2.log("ask price (token1/token0, 18dp): %e", askE18);
         }
 

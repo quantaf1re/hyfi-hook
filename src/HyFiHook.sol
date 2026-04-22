@@ -40,12 +40,12 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     uint public protocolFeePips;  // fee in FEE_DENOM pips (e.g. 1000 = 0.1%)
 
     // --- MM registry (per-pool) ----------------------------------------------
-    struct LP {
+    struct MM {
         address   mm;
         ILPQuoter quoter;
     }
 
-    mapping(PoolId => LP[])                          internal _poolMMs;
+    mapping(PoolId => MM[])                          internal _poolMMs;
     mapping(PoolId => mapping(address => uint8))     internal _poolMMIndex; // 1-indexed
     mapping(address => bool)                         public   whitelisted;
 
@@ -136,9 +136,11 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
         }
     }
 
-    function getPrices(PoolId poolId) external view returns (uint112, uint112, uint32) {
-        PriceData storage p = _prices[poolId];
-        return (p.bidPriceX96, p.spreadX96, p.lastUpdate);
+    function getPrices(PoolId[] calldata poolIds) external view returns (PriceData[] memory out) {
+        out = new PriceData[](poolIds.length);
+        for (uint i; i < poolIds.length; ++i) {
+            out[i] = _prices[poolIds[i]];
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -152,7 +154,7 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
             PoolId pid = poolIds[i];
             if (_poolMMIndex[pid][msg.sender] != 0) revert AlreadyRegistered();
             if (_poolMMs[pid].length >= MAX_LPS) revert MaxLPsReached();
-            _poolMMs[pid].push(LP(msg.sender, quoters[i]));
+            _poolMMs[pid].push(MM(msg.sender, quoters[i]));
             _poolMMIndex[pid][msg.sender] = uint8(_poolMMs[pid].length);
         }
     }
@@ -177,7 +179,7 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
         uint lastIdx = _poolMMs[poolId].length - 1;
 
         if (idx != lastIdx) {
-            LP storage last = _poolMMs[poolId][lastIdx];
+            MM storage last = _poolMMs[poolId][lastIdx];
             _poolMMs[poolId][idx] = last;
             _poolMMIndex[poolId][last.mm] = idx1;
         }
@@ -199,21 +201,21 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     }
 
     function getMM(PoolId poolId, uint index) external view returns (address mm, address quoter) {
-        LP storage lp = _poolMMs[poolId][index];
-        return (lp.mm, address(lp.quoter));
+        MM storage m = _poolMMs[poolId][index];
+        return (m.mm, address(m.quoter));
     }
 
     // -----------------------------------------------------------------------
     // LP — deposit / withdraw ERC6909 inventory
     // -----------------------------------------------------------------------
 
-    function deposit(Currency currency, uint amount) external payable {
+    function depositTo6909(Currency currency, uint amount) external payable {
         if (!whitelisted[msg.sender]) revert NotWhitelisted();
         lpBalances[msg.sender][currency] += amount;
         pm.unlock(abi.encode(true, currency, amount, msg.sender));
     }
 
-    function withdraw(Currency currency, uint amount) external {
+    function withdrawFrom6909(Currency currency, uint amount) external {
         if (lpBalances[msg.sender][currency] < amount) revert InsufficientBalance();
         lpBalances[msg.sender][currency] -= amount;
         pm.unlock(abi.encode(false, currency, amount, msg.sender));
@@ -311,7 +313,7 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
         bool exactIn = amountSpecified < 0;
         bestInput = type(uint256).max;
 
-        LP[] storage mms = _poolMMs[poolId];
+        MM[] storage mms = _poolMMs[poolId];
         uint len = mms.length;
         for (uint i; i < len; ++i) {
             try mms[i].quoter.quoteTrade{gas: QUOTER_GAS_LIMIT}(

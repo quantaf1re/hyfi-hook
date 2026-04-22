@@ -6,7 +6,7 @@ import {HyFiHook} from "../../src/HyFiHook.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 
-contract HyFiHookDepositTest is HyFiHookSharedSetup {
+contract HyFiHookDepositTo6909Test is HyFiHookSharedSetup {
     using CurrencyLibrary for Currency;
 
     function setUp() public {
@@ -15,27 +15,27 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
 
     // ─── Native deposit ──────────────────────────────────────────────────
 
-    function test_deposit_native_increasesClaims() public {
+    function test_depositTo6909_native_increasesClaims() public {
         uint256 amount = 50e18;
         uint256 balBefore = hook.lpBalances(mm1, native);
         uint256 claimsBefore = pm.balanceOf(address(hook), native.toId());
         uint256 senderBefore = mm1.balance;
 
         vm.prank(mm1);
-        hook.deposit{value: amount}(native, amount);
+        hook.depositTo6909{value: amount}(native, amount);
 
         assertEq(hook.lpBalances(mm1, native) - balBefore, amount, "lpBalance should increase");
         assertEq(pm.balanceOf(address(hook), native.toId()) - claimsBefore, amount, "hook claims should increase");
         assertEq(senderBefore - mm1.balance, amount, "sender native balance should decrease");
     }
 
-    function test_deposit_native_oneWei() public {
+    function test_depositTo6909_native_oneWei() public {
         uint256 balBefore = hook.lpBalances(mm1, native);
         uint256 claimsBefore = pm.balanceOf(address(hook), native.toId());
         uint256 senderBefore = mm1.balance;
 
         vm.prank(mm1);
-        hook.deposit{value: 1}(native, 1);
+        hook.depositTo6909{value: 1}(native, 1);
 
         assertEq(hook.lpBalances(mm1, native) - balBefore, 1, "lpBalance should increase by 1");
         assertEq(pm.balanceOf(address(hook), native.toId()) - claimsBefore, 1, "hook claims should increase by 1");
@@ -44,7 +44,7 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
 
     // ─── ERC20 deposit ───────────────────────────────────────────────────
 
-    function test_deposit_ERC20_increasesClaims() public {
+    function test_depositTo6909_ERC20_increasesClaims() public {
         uint256 amount = 10e6;
         uint256 balBefore = hook.lpBalances(mm1, usdc);
         uint256 claimsBefore = pm.balanceOf(address(hook), usdc.toId());
@@ -52,7 +52,7 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
 
         vm.startPrank(mm1);
         IERC20(USDC_ADDR).approve(address(hook), amount);
-        hook.deposit(usdc, amount);
+        hook.depositTo6909(usdc, amount);
         vm.stopPrank();
 
         assertEq(hook.lpBalances(mm1, usdc) - balBefore, amount, "lpBalance should increase");
@@ -60,7 +60,7 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
         assertEq(senderBefore - usdc.balanceOf(mm1), amount, "sender ERC20 balance should decrease");
     }
 
-    function test_deposit_ERC20_multipleDeposits() public {
+    function test_depositTo6909_ERC20_multipleDeposits() public {
         uint256 a1 = 10e6;
         uint256 a2 = 20e6;
         uint256 balBefore = hook.lpBalances(mm1, usdc);
@@ -69,8 +69,8 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
 
         vm.startPrank(mm1);
         IERC20(USDC_ADDR).approve(address(hook), a1 + a2);
-        hook.deposit(usdc, a1);
-        hook.deposit(usdc, a2);
+        hook.depositTo6909(usdc, a1);
+        hook.depositTo6909(usdc, a2);
         vm.stopPrank();
 
         assertEq(hook.lpBalances(mm1, usdc) - balBefore, a1 + a2, "lpBalance should increase");
@@ -80,12 +80,12 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
 
     // ─── Revert: not whitelisted ─────────────────────────────────────────
 
-    function test_deposit_RevertWhen_notWhitelisted() public {
+    function test_depositTo6909_RevertWhen_notWhitelisted() public {
         address notWL = makeAddr("notWL");
         vm.deal(notWL, 1 ether);
         vm.prank(notWL);
         vm.expectRevert(HyFiHook.NotWhitelisted.selector);
-        hook.deposit{value: 1 ether}(native, 1 ether);
+        hook.depositTo6909{value: 1 ether}(native, 1 ether);
     }
 
     // ─── unlockCallback access control ───────────────────────────────────
@@ -98,7 +98,7 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
 
     // ─── Isolation: deposit does not affect another MM's balance ─────────
 
-    function test_deposit_doesNotAffectOtherMM() public {
+    function test_depositTo6909_doesNotAffectOtherMM() public {
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
         vm.deal(mm2, 100e18);
@@ -106,7 +106,7 @@ contract HyFiHookDepositTest is HyFiHookSharedSetup {
         uint256 mm1BalBefore = hook.lpBalances(mm1, native);
 
         vm.prank(mm2);
-        hook.deposit{value: 10e18}(native, 10e18);
+        hook.depositTo6909{value: 10e18}(native, 10e18);
 
         assertEq(hook.lpBalances(mm2, native), 10e18, "mm2 credited");
         assertEq(hook.lpBalances(mm1, native), mm1BalBefore, "mm1 unchanged");

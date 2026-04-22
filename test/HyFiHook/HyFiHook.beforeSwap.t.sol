@@ -209,9 +209,9 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         vm.deal(mm2, 1_000_000 * 10 ** POL_DECIMALS);
         deal(USDC_ADDR, mm2, 1_000_000 * 10 ** USDC_DECIMALS);
         vm.startPrank(mm2);
-        hook.deposit{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
+        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
         IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.deposit(usdc, 1_000 * 10 ** USDC_DECIMALS);
+        hook.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
         vm.stopPrank();
 
         uint256 amountIn = 1e18;
@@ -537,9 +537,9 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         vm.deal(mm, 1_000_000 * 10 ** POL_DECIMALS);
         deal(USDC_ADDR, mm, 1_000_000 * 10 ** USDC_DECIMALS);
         vm.startPrank(mm);
-        hook.deposit{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
+        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
         IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.deposit(usdc, 1_000 * 10 ** USDC_DECIMALS);
+        hook.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
         vm.stopPrank();
     }
 

@@ -120,9 +120,9 @@ contract HyFiHookSharedSetup is Test, Utils {
         deal(USDC_ADDR, mm1, 1_000_000 * 10 ** USDC_DECIMALS);
 
         vm.startPrank(mm1);
-        hook.deposit{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
+        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
         IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.deposit(usdc, 1_000 * 10 ** USDC_DECIMALS);
+        hook.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
         vm.stopPrank();
 
         // Set a default price

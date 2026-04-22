@@ -21,10 +21,12 @@ contract HyFiHookSetPricesTest is HyFiHookSharedSetup {
         vm.warp(12345);
         setPricesSingle(hook, poolId, bid, spread);
 
-        (uint112 storedBid, uint112 storedSpread, uint32 lastUpdate) = hook.getPrices(poolId);
-        assertEq(storedBid, bid, "bid should match");
-        assertEq(storedSpread, spread, "spread should match");
-        assertEq(lastUpdate, 12345, "lastUpdate should be block.timestamp");
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = poolId;
+        HyFiHook.PriceData[] memory got = hook.getPrices(pids);
+        assertEq(got[0].bidPriceX96, bid, "bid should match");
+        assertEq(got[0].spreadX96, spread, "spread should match");
+        assertEq(got[0].lastUpdate, 12345, "lastUpdate should be block.timestamp");
     }
 
     // ─── Multiple pools in one call ──────────────────────────────────────
@@ -50,15 +52,14 @@ contract HyFiHookSetPricesTest is HyFiHookSharedSetup {
         vm.warp(1000);
         hook.setPrices(pids, bids, spreads);
 
-        (uint112 sb1, uint112 ss1, uint32 lu1) = hook.getPrices(poolId);
-        (uint112 sb2, uint112 ss2, uint32 lu2) = hook.getPrices(otherId);
+        HyFiHook.PriceData[] memory got = hook.getPrices(pids);
 
-        assertEq(sb1, bid1);
-        assertEq(ss1, spread1);
-        assertEq(lu1, 1000);
-        assertEq(sb2, bid2);
-        assertEq(ss2, spread2);
-        assertEq(lu2, 1000);
+        assertEq(got[0].bidPriceX96, bid1);
+        assertEq(got[0].spreadX96, spread1);
+        assertEq(got[0].lastUpdate, 1000);
+        assertEq(got[1].bidPriceX96, bid2);
+        assertEq(got[1].spreadX96, spread2);
+        assertEq(got[1].lastUpdate, 1000);
     }
 
     // ─── Zero spread ─────────────────────────────────────────────────────
@@ -67,10 +68,12 @@ contract HyFiHookSetPricesTest is HyFiHookSharedSetup {
         vm.warp(5555);
         setPricesSingle(hook, poolId, uint112(Q96), 0);
 
-        (uint112 bid, uint112 spread, uint32 ts) = hook.getPrices(poolId);
-        assertEq(bid, uint112(Q96));
-        assertEq(spread, 0);
-        assertEq(ts, 5555);
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = poolId;
+        HyFiHook.PriceData[] memory got = hook.getPrices(pids);
+        assertEq(got[0].bidPriceX96, uint112(Q96));
+        assertEq(got[0].spreadX96, 0);
+        assertEq(got[0].lastUpdate, 5555);
     }
 
     // ─── Overwrite existing price ────────────────────────────────────────
@@ -82,10 +85,12 @@ contract HyFiHookSetPricesTest is HyFiHookSharedSetup {
         vm.warp(200);
         setPricesSingle(hook, poolId, uint112(2 * Q96), uint112(Q96 / 50));
 
-        (uint112 bid, uint112 spread, uint32 ts) = hook.getPrices(poolId);
-        assertEq(bid, uint112(2 * Q96));
-        assertEq(spread, uint112(Q96 / 50));
-        assertEq(ts, 200);
+        PoolId[] memory pids = new PoolId[](1);
+        pids[0] = poolId;
+        HyFiHook.PriceData[] memory got = hook.getPrices(pids);
+        assertEq(got[0].bidPriceX96, uint112(2 * Q96));
+        assertEq(got[0].spreadX96, uint112(Q96 / 50));
+        assertEq(got[0].lastUpdate, 200);
     }
 
     // ─── Length mismatch ─────────────────────────────────────────────────
