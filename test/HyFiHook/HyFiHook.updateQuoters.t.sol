@@ -17,7 +17,7 @@ contract HyFiHookUpdateQuotersTest is HyFiHookSharedSetup {
     // ─── Happy path ──────────────────────────────────────────────────────
 
     function test_updateQuoters_changesQuoter() public {
-        SimpleQuoter newQ = new SimpleQuoter(mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter newQ = new SimpleQuoter(pm, address(hook), mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
 
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = poolId;
@@ -37,7 +37,7 @@ contract HyFiHookUpdateQuotersTest is HyFiHookSharedSetup {
         PoolId otherId = PoolId.wrap(keccak256("other"));
         registerMM(hook, mm1, otherId, ILPQuoter(address(quoter)));
 
-        SimpleQuoter newQ = new SimpleQuoter(mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter newQ = new SimpleQuoter(pm, address(hook), mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
 
         PoolId[] memory pids = new PoolId[](2);
         pids[0] = poolId;
@@ -106,11 +106,11 @@ contract HyFiHookUpdateQuotersTest is HyFiHookSharedSetup {
         // Register mm2 with its own quoter.
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
         // mm1 updates its quoter.
-        SimpleQuoter newQ1 = new SimpleQuoter(mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter newQ1 = new SimpleQuoter(pm, address(hook), mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = poolId;
         ILPQuoter[] memory qs = new ILPQuoter[](1);

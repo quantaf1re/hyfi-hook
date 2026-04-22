@@ -88,8 +88,8 @@ contract HyFiHookSharedSetup is Test, Utils {
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy{salt: salt}(address(impl), owner, initData);
         hook = HyFiHook(payable(address(proxy)));
 
-        // Deploy SimpleQuoter for mm1
-        quoter = new SimpleQuoter(mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        // Deploy SimpleQuoter for mm1 (custodies MM inventory; hook is pre-approved PM operator)
+        quoter = new SimpleQuoter(pm, address(hook), mm1, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
 
         // Create pool
         poolKey = PoolKey({
@@ -115,14 +115,14 @@ contract HyFiHookSharedSetup is Test, Utils {
         vm.prank(mm1);
         hook.registerPools(pids, quoters);
 
-        // Fund mm1 with tokens, then deposit into hook
+        // Fund mm1 with tokens, then deposit into the quoter (the custody contract)
         vm.deal(mm1, 1_000_000 * 10 ** POL_DECIMALS);
         deal(USDC_ADDR, mm1, 1_000_000 * 10 ** USDC_DECIMALS);
 
         vm.startPrank(mm1);
-        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
-        IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
+        quoter.deposit{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
+        IERC20(USDC_ADDR).approve(address(quoter), 1_000 * 10 ** USDC_DECIMALS);
+        quoter.deposit(usdc, 1_000 * 10 ** USDC_DECIMALS);
         vm.stopPrank();
 
         // Set a default price

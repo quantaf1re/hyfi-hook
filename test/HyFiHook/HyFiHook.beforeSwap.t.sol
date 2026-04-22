@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
 import {Test, console2} from "forge-std/Test.sol";
@@ -38,8 +39,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
@@ -47,8 +48,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc balance decrease");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc balance decrease");
     }
 
     // =====================================================================
@@ -67,8 +68,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees1Before = hook.protocolFees(usdc);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, false, -int256(amountIn));
 
@@ -76,8 +77,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc) - protocolFees1Before, protocolCut, "protocol fee accrues on input side");
         assertEq(trader1Before - usdc.balanceOfSelf(), amountIn, "trader token1 spent");
         assertEq(native.balanceOfSelf() - trader0Before, expectedOut, "trader token0 received");
-        assertEq(hook.lpBalances(mm1, usdc) - mm1Bal1Before, amountIn - protocolCut, "mm1 usdc balance increase minus protocol cut");
-        assertEq(mm1Bal0Before - hook.lpBalances(mm1, native), expectedOut, "mm1 native balance decrease");
+        assertEq(pm.balanceOf(address(quoter), usdc.toId()) - mm1Bal1Before, amountIn - protocolCut, "mm1 usdc balance increase minus protocol cut");
+        assertEq(mm1Bal0Before - pm.balanceOf(address(quoter), native.toId()), expectedOut, "mm1 native balance decrease");
     }
 
     // =====================================================================
@@ -94,8 +95,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, int256(amountOut));
 
@@ -103,8 +104,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), expectedIn, "trader token0 paid");
         assertEq(usdc.balanceOfSelf() - trader1Before, amountOut, "trader token1 received exact");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, expectedIn - protocolCut, "mm1 native balance increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), amountOut, "mm1 usdc balance decrease");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, expectedIn - protocolCut, "mm1 native balance increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), amountOut, "mm1 usdc balance decrease");
     }
 
     // =====================================================================
@@ -121,8 +122,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees1Before = hook.protocolFees(usdc);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, false, int256(amountOut));
 
@@ -130,8 +131,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc) - protocolFees1Before, protocolCut, "protocol fee accrues on input side");
         assertEq(trader1Before - usdc.balanceOfSelf(), expectedIn, "trader token1 paid");
         assertEq(native.balanceOfSelf() - trader0Before, amountOut, "trader token0 received exact");
-        assertEq(hook.lpBalances(mm1, usdc) - mm1Bal1Before, expectedIn - protocolCut, "mm1 usdc balance increase minus protocol cut");
-        assertEq(mm1Bal0Before - hook.lpBalances(mm1, native), amountOut, "mm1 native balance decrease");
+        assertEq(pm.balanceOf(address(quoter), usdc.toId()) - mm1Bal1Before, expectedIn - protocolCut, "mm1 usdc balance increase minus protocol cut");
+        assertEq(mm1Bal0Before - pm.balanceOf(address(quoter), native.toId()), amountOut, "mm1 native balance decrease");
     }
 
     // =====================================================================
@@ -153,8 +154,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
@@ -162,8 +163,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc balance decrease");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc balance decrease");
     }
 
     // =====================================================================
@@ -177,8 +178,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFeesBefore = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
         uint256 expectedOut = expectedExactInOutput(amountIn, uint256(BID_PRICE_X96), expectedFee(0));
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
@@ -189,8 +190,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - expectedCut, "mm1 gets input minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc should decrease by exact output");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - expectedCut, "mm1 gets input minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc should decrease by exact output");
     }
 
     // =====================================================================
@@ -198,80 +199,65 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_bestQuoteWins() public {
-        // mm1 already registered with SimpleQuoter (BASE_FEE=500)
-        // Add mm2 with same quoter — both should have same price, mm1 wins (first found)
         address mm2 = makeAddr("mm2");
-        hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
-
-        // Fund mm2
-        vm.deal(mm2, 1_000_000 * 10 ** POL_DECIMALS);
-        deal(USDC_ADDR, mm2, 1_000_000 * 10 ** USDC_DECIMALS);
-        vm.startPrank(mm2);
-        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
-        IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
-        vm.stopPrank();
 
         uint256 amountIn = 1e18;
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
-        uint256 mm2Bal0Before = hook.lpBalances(mm2, native);
-        uint256 mm2Bal1Before = hook.lpBalances(mm2, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
+        uint256 mm2Bal0Before = pm.balanceOf(address(q2), native.toId());
+        uint256 mm2Bal1Before = pm.balanceOf(address(q2), usdc.toId());
         uint256 expectedOut = expectedExactInOutput(amountIn, uint256(BID_PRICE_X96), expectedFee(0));
         uint256 protocolCut = amountIn * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
         uint256 protocolFees0Before = hook.protocolFees(native);
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
-        // Both quoters return the same output, so the first one (mm1) should win
         assertEq(hook.protocolFees(native) - protocolFees0Before, protocolCut, "protocol fee accrues on input side");
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 native should increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc should decrease by exact output");
-        assertEq(hook.lpBalances(mm2, native), mm2Bal0Before, "mm2 native should be unchanged");
-        assertEq(hook.lpBalances(mm2, usdc), mm2Bal1Before, "mm2 usdc should be unchanged");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 native should increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc should decrease by exact output");
+        assertEq(pm.balanceOf(address(q2), native.toId()), mm2Bal0Before, "mm2 native should be unchanged");
+        assertEq(pm.balanceOf(address(q2), usdc.toId()), mm2Bal1Before, "mm2 usdc should be unchanged");
     }
 
     // =====================================================================
-    //  MM with insufficient balance is skipped
+    //  Tied quote → first MM (index 0) wins (strict '>' tiebreaker)
     // =====================================================================
 
-    function test_beforeSwap_skipsMMWithInsufficientBalance() public {
-        // Add mm2 with no balance
+    function test_beforeSwap_tiedQuote_firstMMWins() public {
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
-        // mm2 has no deposits — should be skipped
 
         uint256 amountIn = 1e18;
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
-        uint256 mm2Bal0Before = hook.lpBalances(mm2, native);
-        uint256 mm2Bal1Before = hook.lpBalances(mm2, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
+        uint256 mm2Bal0Before = pm.balanceOf(address(q2), native.toId());
+        uint256 mm2Bal1Before = pm.balanceOf(address(q2), usdc.toId());
         uint256 expectedOut = expectedExactInOutput(amountIn, uint256(BID_PRICE_X96), expectedFee(0));
         uint256 protocolCut = amountIn * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
         uint256 protocolFees0Before = hook.protocolFees(native);
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
-        // mm1 should have filled the trade
         assertEq(hook.protocolFees(native) - protocolFees0Before, protocolCut, "protocol fee accrues on input side");
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc balance decrease");
-        assertEq(hook.lpBalances(mm2, native), mm2Bal0Before, "mm2 native should be unchanged");
-        assertEq(hook.lpBalances(mm2, usdc), mm2Bal1Before, "mm2 usdc should be unchanged");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc balance decrease");
+        assertEq(pm.balanceOf(address(q2), native.toId()), mm2Bal0Before, "mm2 native should be unchanged");
+        assertEq(pm.balanceOf(address(q2), usdc.toId()), mm2Bal1Before, "mm2 usdc should be unchanged");
     }
 
     // =====================================================================
@@ -305,8 +291,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(polIn));
 
@@ -314,8 +300,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), polIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, polIn - protocolCut, "mm1 native balance increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc balance decrease");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, polIn - protocolCut, "mm1 native balance increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc balance decrease");
     }
 
     // =====================================================================
@@ -337,8 +323,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
@@ -346,8 +332,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
         assertEq(usdc.balanceOfSelf() - trader1Before, freshOut, "trader token1 received");
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), freshOut, "mm1 usdc balance decrease");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 native balance increase minus protocol cut");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), freshOut, "mm1 usdc balance decrease");
     }
 
     // =====================================================================
@@ -365,13 +351,13 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
-        uint256 hookGain0 = hook.lpBalances(mm1, native) - mm1Bal0Before;
-        uint256 hookLoss1 = mm1Bal1Before - hook.lpBalances(mm1, usdc);
+        uint256 hookGain0 = pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before;
+        uint256 hookLoss1 = mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId());
 
         assertEq(hookGain0, amountIn - protocolCut, "hook gets exact input minus protocol cut");
 
@@ -395,15 +381,15 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolFees0Before = hook.protocolFees(native);
         uint256 trader0Before = native.balanceOfSelf();
         uint256 trader1Before = usdc.balanceOfSelf();
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, int256(amountOut));
 
         uint256 traderPaid = trader0Before - native.balanceOfSelf();
         uint256 protocolCut = traderPaid * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
-        uint256 hookGain0 = hook.lpBalances(mm1, native) - mm1Bal0Before;
-        uint256 hookLoss1 = mm1Bal1Before - hook.lpBalances(mm1, usdc);
+        uint256 hookGain0 = pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before;
+        uint256 hookLoss1 = mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId());
 
         uint256 inputBeforeFee = FullMath.mulDiv(amountOut, Q96, uint256(bid));
         uint256 inputMin = inputBeforeFee * FEE_DENOM / (FEE_DENOM - fee);
@@ -433,8 +419,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
             uint256 protocolFees0Before = hook.protocolFees(native);
             uint256 trader0Before = native.balanceOfSelf();
             uint256 trader1Before = usdc.balanceOfSelf();
-            uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-            uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+            uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+            uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
 
             swap(UNIVERSAL_ROUTER, poolKey, true, int256(amountOut));
 
@@ -442,8 +428,8 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
             assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
             assertEq(trader0Before - native.balanceOfSelf(), expectedIn, "trader token0 paid");
             assertEq(usdc.balanceOfSelf() - trader1Before, amountOut, "trader token1 received");
-            assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, expectedIn - protocolCut, "mm1 native balance increase minus protocol cut");
-            assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), amountOut, "mm1 usdc balance decrease");
+            assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, expectedIn - protocolCut, "mm1 native balance increase minus protocol cut");
+            assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), amountOut, "mm1 usdc balance decrease");
         }
     }
 
@@ -472,7 +458,6 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     }
 
     function test_beforeSwap_RevertWhen_noMMsRegistered() public {
-        // Deregister mm1
         deregisterMM(hook, mm1, poolId);
 
         SwapParams memory params = SwapParams({
@@ -498,7 +483,6 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     }
 
     function test_beforeSwap_RevertWhen_zeroOutputFromQuoter() public {
-        // Set price so low that output rounds to 0
         setPricesSingle(hook, poolId, 1, 0);
 
         SwapParams memory params = SwapParams({
@@ -523,7 +507,6 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         });
 
         vm.prank(address(pm));
-        // At 100% fee, quoter reverts with ZeroOutput → catch → NoQuoteAvailable
         vm.expectRevert(HyFiHook.NoQuoteAvailable.selector);
         hook.beforeSwap(address(this), poolKey, params, "");
     }
@@ -532,69 +515,54 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     //  Multi-MM: strictly better quote wins (different quoter logic)
     // =====================================================================
 
-    function _fundMM(address mm) internal {
-        hook.addToWhitelist(mm);
-        vm.deal(mm, 1_000_000 * 10 ** POL_DECIMALS);
-        deal(USDC_ADDR, mm, 1_000_000 * 10 ** USDC_DECIMALS);
-        vm.startPrank(mm);
-        hook.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
-        IERC20(USDC_ADDR).approve(address(hook), 1_000 * 10 ** USDC_DECIMALS);
-        hook.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
-        vm.stopPrank();
-    }
-
     function test_beforeSwap_betterQuoterWins_exactIn_zeroForOne() public {
-        // mm1 uses SimpleQuoter (default baseFee=500). mm2 uses a zero-fee SimpleQuoter.
         address mm2 = makeAddr("mm2");
-        _fundMM(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(mm2, 0, 0);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, 0, 0);
+        fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
         uint256 amountIn = 1e18;
         uint256 protocolCut = amountIn * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
-        // Zero-fee quote: mulDiv(amountIn, BID_PRICE_X96, Q96) — no fee applied
         uint256 expectedOut = FullMath.mulDiv(amountIn, uint256(BID_PRICE_X96), Q96);
 
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
-        uint256 mm2Bal0Before = hook.lpBalances(mm2, native);
-        uint256 mm2Bal1Before = hook.lpBalances(mm2, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
+        uint256 mm2Bal0Before = pm.balanceOf(address(q2), native.toId());
+        uint256 mm2Bal1Before = pm.balanceOf(address(q2), usdc.toId());
         uint256 trader1Before = usdc.balanceOfSelf();
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
-        // mm2 should win because zero-fee quoter gives strictly higher output
         assertEq(usdc.balanceOfSelf() - trader1Before, expectedOut, "trader gets zero-fee output");
-        assertEq(hook.lpBalances(mm2, native) - mm2Bal0Before, amountIn - protocolCut, "mm2 native credited minus protocol cut");
-        assertEq(mm2Bal1Before - hook.lpBalances(mm2, usdc), expectedOut, "mm2 usdc debited by exact output");
-        assertEq(hook.lpBalances(mm1, native), mm1Bal0Before, "mm1 native untouched (lost bid)");
-        assertEq(hook.lpBalances(mm1, usdc), mm1Bal1Before, "mm1 usdc untouched (lost bid)");
+        assertEq(pm.balanceOf(address(q2), native.toId()) - mm2Bal0Before, amountIn - protocolCut, "mm2 native credited minus protocol cut");
+        assertEq(mm2Bal1Before - pm.balanceOf(address(q2), usdc.toId()), expectedOut, "mm2 usdc debited by exact output");
+        assertEq(pm.balanceOf(address(quoter), native.toId()), mm1Bal0Before, "mm1 native untouched (lost bid)");
+        assertEq(pm.balanceOf(address(quoter), usdc.toId()), mm1Bal1Before, "mm1 usdc untouched (lost bid)");
     }
 
     function test_beforeSwap_betterQuoterWins_exactOut_zeroForOne() public {
-        // mm2 with zero-fee SimpleQuoter requires strictly less input than mm1
         address mm2 = makeAddr("mm2");
-        _fundMM(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(mm2, 0, 0);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, 0, 0);
+        fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
         uint256 amountOut = 500_000;
         uint256 expectedIn = FullMath.mulDivRoundingUp(amountOut, Q96, uint256(BID_PRICE_X96));
         uint256 protocolCut = expectedIn * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
 
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
-        uint256 mm2Bal0Before = hook.lpBalances(mm2, native);
-        uint256 mm2Bal1Before = hook.lpBalances(mm2, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
+        uint256 mm2Bal0Before = pm.balanceOf(address(q2), native.toId());
+        uint256 mm2Bal1Before = pm.balanceOf(address(q2), usdc.toId());
         uint256 trader0Before = native.balanceOfSelf();
 
         swap(UNIVERSAL_ROUTER, poolKey, true, int256(amountOut));
 
         assertEq(trader0Before - native.balanceOfSelf(), expectedIn, "trader pays zero-fee input");
-        assertEq(hook.lpBalances(mm2, native) - mm2Bal0Before, expectedIn - protocolCut, "mm2 native credited");
-        assertEq(mm2Bal1Before - hook.lpBalances(mm2, usdc), amountOut, "mm2 usdc debited exact output");
-        assertEq(hook.lpBalances(mm1, native), mm1Bal0Before, "mm1 untouched");
-        assertEq(hook.lpBalances(mm1, usdc), mm1Bal1Before, "mm1 untouched");
+        assertEq(pm.balanceOf(address(q2), native.toId()) - mm2Bal0Before, expectedIn - protocolCut, "mm2 native credited");
+        assertEq(mm2Bal1Before - pm.balanceOf(address(q2), usdc.toId()), amountOut, "mm2 usdc debited exact output");
+        assertEq(pm.balanceOf(address(quoter), native.toId()), mm1Bal0Before, "mm1 untouched");
+        assertEq(pm.balanceOf(address(quoter), usdc.toId()), mm1Bal1Before, "mm1 untouched");
     }
 
     // =====================================================================
@@ -602,9 +570,9 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_revertingQuoterSkipped() public {
-        // Add mm2 with a quoter that always reverts. mm1 should still fill the trade.
         address mm2 = makeAddr("mm2");
-        _fundMM(mm2);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         RevertingQuoter qRevert = new RevertingQuoter();
         registerMM(hook, mm2, poolId, ILPQuoter(address(qRevert)));
 
@@ -612,17 +580,17 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         uint256 protocolCut = amountIn * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
         uint256 expectedOut = expectedExactInOutput(amountIn, uint256(BID_PRICE_X96), expectedFee(0));
 
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
-        uint256 mm2Bal0Before = hook.lpBalances(mm2, native);
-        uint256 mm2Bal1Before = hook.lpBalances(mm2, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
+        uint256 mm2Bal0Before = pm.balanceOf(address(q2), native.toId());
+        uint256 mm2Bal1Before = pm.balanceOf(address(q2), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 fills after mm2 skipped");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 usdc debited");
-        assertEq(hook.lpBalances(mm2, native), mm2Bal0Before, "mm2 (reverting) untouched");
-        assertEq(hook.lpBalances(mm2, usdc), mm2Bal1Before, "mm2 (reverting) untouched");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 fills after mm2 skipped");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc debited");
+        assertEq(pm.balanceOf(address(q2), native.toId()), mm2Bal0Before, "mm2 (reverting) untouched");
+        assertEq(pm.balanceOf(address(q2), usdc.toId()), mm2Bal1Before, "mm2 (reverting) untouched");
     }
 
     // =====================================================================
@@ -630,7 +598,6 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_RevertWhen_allQuotersRevert() public {
-        // Replace mm1's quoter with a reverting one
         RevertingQuoter qRevert = new RevertingQuoter();
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = poolId;
@@ -655,34 +622,27 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_betterMMSkippedForBalance_worseWins() public {
-        // mm2 has a better quoter but no output-side balance
+        // mm2 has a strictly better (zero-fee) quote but no output-side balance,
+        // so the inventory check skips it and mm1 wins with its worse quote.
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(mm2, 0, 0);
+        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, 0, 0);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
-        // mm2 never deposits → insufficient USDC for any swap output
 
         uint256 amountIn = 1e18;
         uint256 protocolCut = amountIn * DEFAULT_PROTOCOL_FEE_PIPS / FEE_DENOM;
         uint256 expectedOut = expectedExactInOutput(amountIn, uint256(BID_PRICE_X96), expectedFee(0));
 
-        uint256 mm1Bal0Before = hook.lpBalances(mm1, native);
-        uint256 mm1Bal1Before = hook.lpBalances(mm1, usdc);
+        uint256 mm1Bal0Before = pm.balanceOf(address(quoter), native.toId());
+        uint256 mm1Bal1Before = pm.balanceOf(address(quoter), usdc.toId());
+        uint256 mm2Bal0Before = pm.balanceOf(address(q2), native.toId());
+        uint256 mm2Bal1Before = pm.balanceOf(address(q2), usdc.toId());
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
-        // mm1 fills with its worse quote since mm2 was skipped for insufficient balance
-        assertEq(hook.lpBalances(mm1, native) - mm1Bal0Before, amountIn - protocolCut, "mm1 native credited");
-        assertEq(mm1Bal1Before - hook.lpBalances(mm1, usdc), expectedOut, "mm1 debits SimpleQuoter output");
+        assertEq(pm.balanceOf(address(quoter), native.toId()) - mm1Bal0Before, amountIn - protocolCut, "mm1 native credited");
+        assertEq(mm1Bal1Before - pm.balanceOf(address(quoter), usdc.toId()), expectedOut, "mm1 usdc debited by mm1's (worse) output");
+        assertEq(pm.balanceOf(address(q2), native.toId()), mm2Bal0Before, "mm2 (insufficient balance) untouched");
+        assertEq(pm.balanceOf(address(q2), usdc.toId()), mm2Bal1Before, "mm2 (insufficient balance) untouched");
     }
-
-    // =====================================================================
-    //  Reentrancy: malicious quoter tries to call beforeSwap during quoting
-    // =====================================================================
-
-    // NOTE: Constructing a true reentrancy test against beforeSwap requires
-    // either a malicious PoolManager or a quoter that can re-enter during the
-    // staticcall — neither of which is possible given the EVM staticcall
-    // semantics in _findBestQuote. The `nonReentrant` modifier is defensive
-    // and protects against future non-staticcall code paths.
 }

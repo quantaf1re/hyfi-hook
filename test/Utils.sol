@@ -12,11 +12,15 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {console2} from "forge-std/console2.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {StdCheats} from "forge-std/StdCheats.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {HyFiHook} from "../src/HyFiHook.sol";
 import {ILPQuoter} from "../src/interfaces/ILPQuoter.sol";
+import {SimpleQuoter} from "../src/SimpleQuoter.sol";
 
-abstract contract Utils {
+abstract contract Utils is StdCheats {
     Vm private constant _cheats = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     using CurrencyLibrary for Currency;
 
@@ -221,5 +225,23 @@ abstract contract Utils {
         pids[0] = pid;
         _cheats.prank(mm);
         hook_.deregisterPools(pids);
+    }
+
+    function fundMM(
+        HyFiHook hook_,
+        address mm,
+        SimpleQuoter q,
+        address token,
+        uint256 nativeAm,
+        uint256 tokenAm
+    ) internal {
+        hook_.addToWhitelist(mm);
+        _cheats.deal(mm, nativeAm);
+        deal(token, mm, tokenAm);
+        _cheats.startPrank(mm);
+        q.deposit{value: nativeAm}(Currency.wrap(address(0)), nativeAm);
+        IERC20(token).approve(address(q), tokenAm);
+        q.deposit(Currency.wrap(token), tokenAm);
+        _cheats.stopPrank();
     }
 }

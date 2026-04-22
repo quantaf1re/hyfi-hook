@@ -56,13 +56,13 @@ contract HyFiHookSetProtocolFeeTest is HyFiHookSharedSetup {
         uint256 amountIn = 1e6; // 1 USDC in
         uint256 expectedCut = amountIn * feePips / FEE_DENOM;
 
-        uint256 mm1UsdcBefore = hook.lpBalances(mm1, usdc);
+        uint256 mm1UsdcBefore = pm.balanceOf(address(quoter), usdc.toId());
         uint256 protocolFeesBefore = hook.protocolFees(usdc);
 
         swap(UNIVERSAL_ROUTER, poolKey, false, -int256(amountIn));
 
         uint256 protocolFeesAfter = hook.protocolFees(usdc);
-        uint256 mm1UsdcAfter = hook.lpBalances(mm1, usdc);
+        uint256 mm1UsdcAfter = pm.balanceOf(address(quoter), usdc.toId());
 
         // Protocol gets exactly the cut
         assertEq(protocolFeesAfter - protocolFeesBefore, expectedCut, "protocol fee accumulation");

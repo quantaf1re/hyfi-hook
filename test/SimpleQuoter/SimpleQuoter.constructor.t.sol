@@ -21,6 +21,6 @@ contract SimpleQuoterConstructorTest is HyFiHookSharedSetup {
 
     function test_constructor_RevertWhen_baseFeeAboveMax() public {
         vm.expectRevert(SimpleQuoter.FeeTooHigh.selector);
-        new SimpleQuoter(address(this), MAX_FEE + 1, DEFAULT_FEE_PER_SECOND);
+        new SimpleQuoter(pm, address(hook), address(this), MAX_FEE + 1, DEFAULT_FEE_PER_SECOND);
     }
 }

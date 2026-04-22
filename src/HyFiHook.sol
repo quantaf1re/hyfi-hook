@@ -49,9 +49,6 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     mapping(PoolId => mapping(address => uint8))     internal _poolMMIndex; // 1-indexed
     mapping(address => bool)                         public   whitelisted;
 
-    // --- LP sub-accounting (hook's aggregate ERC6909 split per LP) -----------
-    mapping(address lp => mapping(Currency => uint256)) public lpBalances;
-
     // --- Centralised price data (owner-updated) ------------------------------
     struct PriceData {
         uint112 bidPriceX96;
@@ -73,7 +70,6 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     error NotRegistered();
     error MaxLPsReached();
     error NoQuoteAvailable();
-    error InsufficientBalance();
     error BadQuoteInput();
     error BadQuoteOutput();
     error FeeTooHigh();
@@ -116,7 +112,7 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
         uint amount = protocolFees[currency];
         if (amount == 0) revert NoFeesToCollect();
         protocolFees[currency] = 0;
-        pm.unlock(abi.encode(false, currency, amount, msg.sender));
+        pm.unlock(abi.encode(currency, amount, msg.sender));
     }
 
     // -----------------------------------------------------------------------
@@ -206,33 +202,17 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     }
 
     // -----------------------------------------------------------------------
-    // LP — deposit / withdraw ERC6909 inventory
+    // PoolManager unlock callback — protocol-fee collection only.
+    // MM inventory deposits / withdrawals are handled on each quoter contract
+    // directly; the hook has no custody of MM funds.
     // -----------------------------------------------------------------------
-
-    function depositTo6909(Currency currency, uint amount) external payable {
-        if (!whitelisted[msg.sender]) revert NotWhitelisted();
-        lpBalances[msg.sender][currency] += amount;
-        pm.unlock(abi.encode(true, currency, amount, msg.sender));
-    }
-
-    function withdrawFrom6909(Currency currency, uint amount) external {
-        if (lpBalances[msg.sender][currency] < amount) revert InsufficientBalance();
-        lpBalances[msg.sender][currency] -= amount;
-        pm.unlock(abi.encode(false, currency, amount, msg.sender));
-    }
 
     /// @inheritdoc IUnlockCallback
     function unlockCallback(bytes calldata data) external override onlyPM returns (bytes memory) {
-        (bool isDeposit, Currency currency, uint amount, address mm) =
-            abi.decode(data, (bool, Currency, uint, address));
-
-        if (isDeposit) {
-            currency.settle(pm, mm, amount, false);
-            currency.take(pm, address(this), amount, true);
-        } else {
-            currency.settle(pm, address(this), amount, true);
-            currency.take(pm, mm, amount, false);
-        }
+        (Currency currency, uint amount, address to) = abi.decode(data, (Currency, uint, address));
+        // Burn hook's own protocol-fee 6909, release underlying to `to`.
+        currency.settle(pm, address(this), amount, true);
+        currency.take(pm, to, amount, false);
         return "";
     }
 
@@ -274,23 +254,26 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
             if (bestOutput != uint(params.amountSpecified)) revert BadQuoteOutput();
         }
 
-        // Update winning MM's sub-ledger
-        address mm = _poolMMs[poolId][bestIdx].mm;
+        // Winning MM's quoter contract (custodies the inventory)
+        address quoter = address(_poolMMs[poolId][bestIdx].quoter);
 
-        // Protocol fee: taken from the input side
+        // Protocol fee: taken from the input side, retained as hook-owned 6909.
         uint feePips = protocolFeePips;
         uint protocolCut;
         if (feePips > 0) {
             protocolCut = bestInput * feePips / FEE_DENOM;
             protocolFees[inputCurrency] += protocolCut;
+            inputCurrency.take(pm, address(this), protocolCut, true);
         }
 
-        lpBalances[mm][inputCurrency]  += bestInput - protocolCut;
-        lpBalances[mm][outputCurrency] -= bestOutput;
+        // Winning MM's share of the input → mint 6909 directly to its quoter.
+        uint mmShare = bestInput - protocolCut;
+        if (mmShare > 0) {
+            inputCurrency.take(pm, quoter, mmShare, true);
+        }
 
-        // Move ERC6909 claims in the PoolManager
-        inputCurrency.take(pm, address(this), bestInput, true);
-        outputCurrency.settle(pm, address(this), bestOutput, true);
+        // Burn output-side 6909 from the quoter (pre-authorised via setOperator).
+        outputCurrency.settle(pm, quoter, bestOutput, true);
 
         unspecDelta = exactIn
             // forge-lint: disable-next-line(unsafe-typecast)
@@ -300,6 +283,9 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     }
 
     /// @dev Pure scan — STATICCALL each quoter, track the best.
+    ///      MMs whose quoter has insufficient output-side 6909 inventory are
+    ///      skipped, so a stale/over-optimistic quote can never make a swap
+    ///      revert on the settle step.
     function _findBestQuote(
         PoolKey calldata key,
         PoolId poolId,
@@ -323,10 +309,12 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
                 if (amOut == 0) continue;
 
 
-                // TODO: remove this to save gas
 
-                
-                if (lpBalances[mms[i].mm][outputCurrency] < amOut) continue;
+                // TODO: remove this step to save gas
+
+
+                // Skip MMs whose quoter cannot settle the output-side 6909 burn.
+                if (pm.balanceOf(address(mms[i].quoter), outputCurrency.toId()) < amOut) continue;
 
                 if (exactIn) {
                     if (amOut > bestOutput) {
