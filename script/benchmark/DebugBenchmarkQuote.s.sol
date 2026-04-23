@@ -67,7 +67,7 @@ contract DebugBenchmarkQuote is Script, Utils {
         console2.log("\n=== Hook Price State ===");
         console2.log("bidPriceX96:", uint256(price.bidPriceX96));
         console2.log("spreadX96:", uint256(price.spreadX96));
-        console2.log("lastUpdate:", uint256(price.lastUpdate));
+        console2.log("timestamp:", uint256(price.timestamp));
         if (price.bidPriceX96 > 0) {
             // price = bidPriceX96 / 2^96  (token1 per token0)
             // Use 1e18 scaling for display: price_e18 = bidPriceX96 * 1e18 / 2^96

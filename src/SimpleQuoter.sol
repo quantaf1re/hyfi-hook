@@ -118,10 +118,10 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
         int256 amountSpecified,
         uint256 bidPriceX96,
         uint256 spreadX96,
-        uint32 lastUpdate
+        uint32 timestamp
     ) external view override returns (uint256 amIn, uint256 amOut) {
         uint effectivePriceX96 = zeroForOne ? bidPriceX96 : bidPriceX96 + spreadX96;
-        uint fee = _fee(lastUpdate);
+        uint fee = _fee(timestamp);
 
         if (amountSpecified < 0) {
             amIn = uint(-amountSpecified);
@@ -139,8 +139,8 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
         }
     }
 
-    function _fee(uint32 lastUpdate) internal view returns (uint fee) {
-        uint f = baseFee + (block.timestamp - uint(lastUpdate)) * feePerSecond;
+    function _fee(uint32 timestamp) internal view returns (uint fee) {
+        uint f = baseFee + (block.timestamp - uint(timestamp)) * feePerSecond;
         fee = f > MAX_FEE ? MAX_FEE : f;
     }
 }

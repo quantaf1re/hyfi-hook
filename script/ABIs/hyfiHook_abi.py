@@ -11,6 +11,19 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "function",
+    "name": "addToWhitelist",
+    "inputs": [
+      {
+        "name": "mm",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "afterAddLiquidity",
     "inputs": [
       {
@@ -798,40 +811,29 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "function",
-    "name": "deposit",
+    "name": "collectProtocolFees",
     "inputs": [
       {
         "name": "currency",
         "type": "address",
         "internalType": "Currency"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "getFee",
+    "name": "deregisterPools",
     "inputs": [
       {
-        "name": "poolId",
-        "type": "bytes32",
-        "internalType": "PoolId"
+        "name": "poolIds",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
       }
     ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -920,7 +922,36 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "function",
-    "name": "getPrice",
+    "name": "getMM",
+    "inputs": [
+      {
+        "name": "poolId",
+        "type": "bytes32",
+        "internalType": "PoolId"
+      },
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "mm",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "quoter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getMMCount",
     "inputs": [
       {
         "name": "poolId",
@@ -930,19 +961,45 @@ HYFIHOOK_ABI = """
     ],
     "outputs": [
       {
-        "name": "bidPriceX96",
-        "type": "uint112",
-        "internalType": "uint112"
-      },
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPrices",
+    "inputs": [
       {
-        "name": "spreadX96",
-        "type": "uint112",
-        "internalType": "uint112"
-      },
+        "name": "poolIds",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      }
+    ],
+    "outputs": [
       {
-        "name": "lastUpdate",
-        "type": "uint32",
-        "internalType": "uint32"
+        "name": "out",
+        "type": "tuple[]",
+        "internalType": "struct HyFiHook.PriceData[]",
+        "components": [
+          {
+            "name": "bidPriceX96",
+            "type": "uint112",
+            "internalType": "uint112"
+          },
+          {
+            "name": "spreadX96",
+            "type": "uint112",
+            "internalType": "uint112"
+          },
+          {
+            "name": "timestamp",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -980,6 +1037,24 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "function",
+    "name": "ownerDeregister",
+    "inputs": [
+      {
+        "name": "poolIds",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      },
+      {
+        "name": "mm",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "pm",
     "inputs": [],
     "outputs": [
@@ -993,31 +1068,71 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "function",
-    "name": "renounceOwnership",
+    "name": "protocolFeePips",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "protocolFees",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "Currency"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "registerPools",
+    "inputs": [
+      {
+        "name": "poolIds",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      },
+      {
+        "name": "quoters",
+        "type": "address[]",
+        "internalType": "contract ILPQuoter[]"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "setPrice",
+    "name": "removeFromWhitelist",
     "inputs": [
       {
-        "name": "poolId",
-        "type": "bytes32",
-        "internalType": "PoolId"
-      },
-      {
-        "name": "bidPriceX96",
-        "type": "uint112",
-        "internalType": "uint112"
-      },
-      {
-        "name": "spreadX96",
-        "type": "uint112",
-        "internalType": "uint112"
+        "name": "mm",
+        "type": "address",
+        "internalType": "address"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -1031,14 +1146,39 @@ HYFIHOOK_ABI = """
         "internalType": "PoolId[]"
       },
       {
-        "name": "bidPrices",
-        "type": "uint112[]",
-        "internalType": "uint112[]"
-      },
+        "name": "prices",
+        "type": "tuple[]",
+        "internalType": "struct HyFiHook.PriceData[]",
+        "components": [
+          {
+            "name": "bidPriceX96",
+            "type": "uint112",
+            "internalType": "uint112"
+          },
+          {
+            "name": "spreadX96",
+            "type": "uint112",
+            "internalType": "uint112"
+          },
+          {
+            "name": "timestamp",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setProtocolFee",
+    "inputs": [
       {
-        "name": "spreads",
-        "type": "uint112[]",
-        "internalType": "uint112[]"
+        "name": "newFeePips",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1078,7 +1218,44 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "function",
-    "name": "withdraw",
+    "name": "updateQuoters",
+    "inputs": [
+      {
+        "name": "poolIds",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      },
+      {
+        "name": "newQuoters",
+        "type": "address[]",
+        "internalType": "contract ILPQuoter[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "whitelisted",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "withdrawToken",
     "inputs": [
       {
         "name": "currency",
@@ -1128,6 +1305,26 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "error",
+    "name": "AlreadyRegistered",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadQuoteInput",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadQuoteOutput",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "FeeTooHigh",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "HookNotUsed",
     "inputs": []
   },
@@ -1143,12 +1340,37 @@ HYFIHOOK_ABI = """
   },
   {
     "type": "error",
+    "name": "MaxLPsReached",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoDirectLiquidity",
     "inputs": []
   },
   {
     "type": "error",
+    "name": "NoFeesToCollect",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoQuoteAvailable",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotInitializing",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotRegistered",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotWhitelisted",
     "inputs": []
   },
   {
@@ -1187,10 +1409,6 @@ HYFIHOOK_ABI = """
     "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ZeroOutput",
-    "inputs": []
   }
-]"""
+]
+"""

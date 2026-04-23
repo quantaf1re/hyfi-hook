@@ -18,6 +18,6 @@ interface ILPQuoter {
         int256 amountSpecified,
         uint256 bidPriceX96,
         uint256 spreadX96,
-        uint32 lastUpdate
+        uint32 timestamp
     ) external view returns (uint256 amIn, uint256 amOut);
 }

@@ -16,20 +16,17 @@ contract SetPrices is Script, Utils {
         poolIds[0] = PoolId.wrap(bytes32(0)); // TODO: set pool ID
         poolIds[1] = PoolId.wrap(bytes32(0)); // TODO: set pool ID
 
-        uint112[] memory bidPrices = new uint112[](2);
-        bidPrices[0] = 0; // TODO: set bid price
-        bidPrices[1] = 0; // TODO: set bid price
-
-        uint112[] memory spreads = new uint112[](2);
-        spreads[0] = 0; // TODO: set spread
-        spreads[1] = 0; // TODO: set spread
+        HyFiHook.PriceData[] memory prices = new HyFiHook.PriceData[](2);
+        // TODO: set bid / spread / oracle timestamp for each pool
+        prices[0] = HyFiHook.PriceData(0, 0, uint32(block.timestamp));
+        prices[1] = HyFiHook.PriceData(0, 0, uint32(block.timestamp));
 
         console2.log("=== SetPrices ===");
         console2.log("Hook:", address(hook));
         console2.log("Pool count:", poolIds.length);
 
         vm.startBroadcast(deployerPrivateKey);
-        hook.setPrices(poolIds, bidPrices, spreads);
+        hook.setPrices(poolIds, prices);
         vm.stopBroadcast();
 
         console2.log("Prices set successfully");

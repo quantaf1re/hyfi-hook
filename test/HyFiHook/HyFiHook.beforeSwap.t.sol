@@ -280,7 +280,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_zeroSpread_bidEqualsAsk() public {
-        setPricesSingle(hook, poolId, BID_PRICE_X96, 0);
+        setPricesSingle(hook, poolId, BID_PRICE_X96, 0, uint32(block.timestamp));
         uint256 polIn = 1e18;
         uint256 fee = expectedFee(0);
         uint256 price = uint256(BID_PRICE_X96);
@@ -315,7 +315,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         vm.warp(block.timestamp + 100);
         uint256 staleOut = expectedExactInOutput(amountIn, bidPrice, expectedFee(100));
 
-        setPricesSingle(hook, poolId, BID_PRICE_X96, SPREAD_X96);
+        setPricesSingle(hook, poolId, BID_PRICE_X96, SPREAD_X96, uint32(block.timestamp));
         uint256 freshOut = expectedExactInOutput(amountIn, bidPrice, expectedFee(0));
         assertGt(freshOut, staleOut);
 
@@ -342,7 +342,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
 
     function test_beforeSwap_roundingFavoursHook_exactIn() public {
         uint112 bid = uint112(Q96 * 3 / 7e13);
-        setPricesSingle(hook, poolId, bid, uint112(Q96 / 1e16));
+        setPricesSingle(hook, poolId, bid, uint112(Q96 / 1e16), uint32(block.timestamp));
 
         uint256 amountIn = 1e18 + 1;
         uint256 fee = expectedFee(0);
@@ -373,7 +373,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
 
     function test_beforeSwap_roundingFavoursHook_exactOut() public {
         uint112 bid = uint112(Q96 * 3 / 7e13);
-        setPricesSingle(hook, poolId, bid, uint112(Q96 / 1e16));
+        setPricesSingle(hook, poolId, bid, uint112(Q96 / 1e16), uint32(block.timestamp));
 
         uint256 amountOut = 100_001;
         uint256 fee = expectedFee(0);
@@ -483,7 +483,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     }
 
     function test_beforeSwap_RevertWhen_zeroOutputFromQuoter() public {
-        setPricesSingle(hook, poolId, 1, 0);
+        setPricesSingle(hook, poolId, 1, 0, uint32(block.timestamp));
 
         SwapParams memory params = SwapParams({
             zeroForOne: true,

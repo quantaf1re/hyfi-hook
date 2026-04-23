@@ -49,11 +49,11 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
     mapping(PoolId => mapping(address => uint8))     internal _poolMMIndex; // 1-indexed
     mapping(address => bool)                         public   whitelisted;
 
-    // --- Centralised price data (owner-updated) ------------------------------
+    // --- Centralised price data (oracle-timestamped) -------------------------
     struct PriceData {
         uint112 bidPriceX96;
         uint112 spreadX96;
-        uint32  lastUpdate;
+        uint32  timestamp;
     }
 
     mapping(PoolId => PriceData) internal _prices;
@@ -121,14 +121,11 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
 
     function setPrices(
         PoolId[] calldata poolIds,
-        uint112[] calldata bidPrices,
-        uint112[] calldata spreads
+        PriceData[] calldata prices
     ) external onlyOwner {
-        if (poolIds.length != bidPrices.length || poolIds.length != spreads.length)
-            revert LengthMismatch();
-        uint32 ts = uint32(block.timestamp);
+        if (poolIds.length != prices.length) revert LengthMismatch();
         for (uint i; i < poolIds.length; ++i) {
-            _prices[poolIds[i]] = PriceData(bidPrices[i], spreads[i], ts);
+            _prices[poolIds[i]] = prices[i];
         }
     }
 
@@ -304,7 +301,7 @@ contract HyFiHook is IHooks, IUnlockCallback, Initializable, OwnableUpgradeable,
         for (uint i; i < len; ++i) {
             try mms[i].quoter.quoteTrade{gas: QUOTER_GAS_LIMIT}(
                 key, zeroForOne, amountSpecified,
-                uint256(p.bidPriceX96), uint256(p.spreadX96), p.lastUpdate
+                uint256(p.bidPriceX96), uint256(p.spreadX96), p.timestamp
             ) returns (uint256 amIn, uint256 amOut) {
                 if (amOut == 0) continue;
 

@@ -166,7 +166,10 @@ def price_to_x96_inverted(bid_d, ask_d, t0_decs, t1_decs):
 # Binance helpers
 # ---------------------------------------------------------------------------
 def get_spot_orderbook(symbol, limit=5):
-    """Get spot orderbook.  Returns (bids, asks) sorted closest-to-mid first."""
+    """Get spot orderbook.  Returns (bids, asks, oracle_ts) where oracle_ts is
+    the unix-second timestamp captured just before the request.  Bids/asks are
+    sorted closest-to-mid first."""
+    oracle_ts = int(time.time())
     book = client.get_order_book(symbol=symbol, limit=limit)
     bids = [(D(p), D(q)) for p, q in book['bids']]
     asks = [(D(p), D(q)) for p, q in book['asks']]
@@ -175,7 +178,7 @@ def get_spot_orderbook(symbol, limit=5):
     if not bids or not asks:
         raise RuntimeError(f"Empty orderbook for {symbol}: bids={len(bids)}, asks={len(asks)}")
     logger.debug(f"Spot book {symbol}: bid={bids[0][0]}, ask={asks[0][0]}, spread={asks[0][0] - bids[0][0]}")
-    return bids, asks
+    return bids, asks, oracle_ts
 
 
 def get_perps_position_amt(symbol):
@@ -212,8 +215,10 @@ def place_perps_limit(symbol, side, qty_d, price_d):
 # ---------------------------------------------------------------------------
 # Core logic
 # ---------------------------------------------------------------------------
-def sync_price_if_changed(c, bids, asks):
-    """Convert spot best bid/ask to Q96 and call hook.setPrice if changed.
+def sync_price_if_changed(c, bids, asks, oracle_ts):
+    """Convert spot best bid/ask to Q96 and call hook.setPrices if changed.
+    `oracle_ts` is the time (seconds since epoch) at which the orderbook was
+    observed; this is the timestamp the hook stores for staleness-fee logic.
     Returns (bid_x96, spread_x96, changed_bool)."""
     best_bid_d = bids[0][0]
     best_ask_d = asks[0][0]
@@ -226,21 +231,21 @@ def sync_price_if_changed(c, bids, asks):
         spread_x96 = ask_x96 - bid_x96
 
     if bid_x96 == c['last_bid_x96'] and spread_x96 == c['last_spread_x96']:
-        elapsed = int(time.time()) - c['last_update_ts']
+        elapsed = oracle_ts - c['last_update_ts']
         if elapsed < 10:
-            logger.debug(f"Prices unchanged and only {elapsed}s since last update, skipping setPrice")
+            logger.debug(f"Prices unchanged and only {elapsed}s since last update, skipping setPrices")
             return bid_x96, spread_x96, False
-        logger.info(f"Prices unchanged but {elapsed}s since last update, refreshing setPrice")
-
+        logger.info(f"Prices unchanged but {elapsed}s since last update, refreshing setPrices")
     else:
-        logger.info(f"Prices changed: bid {best_bid_d} ask {best_ask_d} → "f"bidX96={bid_x96} spreadX96={spread_x96}")
+        logger.info(f"Prices changed: bid {best_bid_d} ask {best_ask_d} → "
+                    f"bidX96={bid_x96} spreadX96={spread_x96}")
 
-    send_tx(hook.functions.setPrice(bytes.fromhex(c['pool_id'][2:]), bid_x96, spread_x96))
-    getPrice_return = hook.functions.getPrice(bytes.fromhex(c['pool_id'][2:])).call()
-    c['last_update_ts'] = getPrice_return[2]
+    send_tx(hook.functions.setPrices([bytes.fromhex(c['pool_id'][2:])], [(bid_x96, spread_x96, oracle_ts)]))
+    on_chain = hook.functions.getPrices([bytes.fromhex(c['pool_id'][2:])]).call()[0]
+    c['last_update_ts'] = on_chain[2]
     c['last_bid_x96'] = bid_x96
     c['last_spread_x96'] = spread_x96
-    logger.info("setPrice tx confirmed")
+    logger.info("setPrices tx confirmed")
     return bid_x96, spread_x96, True
 
 
@@ -393,11 +398,11 @@ c['pool_id'] = calculate_pool_id(c['t0'].address, c['t1'].address, POOL_FEE)
 logger.info(f"Pool ID: {c['pool_id']}")
 
 # Read current on-chain price as starting state (handles restarts)
-on_chain = hook.functions.getPrice(bytes.fromhex(c['pool_id'][2:])).call()
+on_chain = hook.functions.getPrices([bytes.fromhex(c['pool_id'][2:])]).call()[0]
 c['last_bid_x96'] = on_chain[0]
 c['last_spread_x96'] = on_chain[1]
 c['last_update_ts'] = on_chain[2]
-logger.info(f"On-chain price: bidX96={on_chain[0]}, spreadX96={on_chain[1]}, lastUpdate={on_chain[2]}")
+logger.info(f"On-chain price: bidX96={on_chain[0]}, spreadX96={on_chain[1]}, timestamp={on_chain[2]}")
 
 # Futures symbol info (tick size, step size, min qty)
 futures_info = client.futures_exchange_info()
@@ -432,11 +437,11 @@ while True:
     try:
         logger.debug('--------------------------------------------new loop iteration--------------------------------------------')
 
-        # 1. Get spot orderbook
-        bids, asks = get_spot_orderbook(c['spot_pair'])
+        # 1. Get spot orderbook (oracle_ts captured inside, just before the API call)
+        bids, asks, oracle_ts = get_spot_orderbook(c['spot_pair'])
 
         # 2. Sync hook price if spot moved
-        bid_x96, spread_x96, price_changed = sync_price_if_changed(c, bids, asks)
+        bid_x96, spread_x96, price_changed = sync_price_if_changed(c, bids, asks, oracle_ts)
 
         # # 3. Read hook claims to detect trades
         # base_claims_w, quote_claims_w = read_hook_claims(c)

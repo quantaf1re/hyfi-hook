@@ -18,7 +18,7 @@ contract HyFiHookGetPricesTest is HyFiHookSharedSetup {
         assertEq(out.length, 1);
         assertEq(out[0].bidPriceX96, BID_PRICE_X96);
         assertEq(out[0].spreadX96, SPREAD_X96);
-        assertGt(out[0].lastUpdate, 0);
+        assertGt(out[0].timestamp, 0);
     }
 
     function test_getPrices_unsetPool_returnsZeros() public view {
@@ -28,7 +28,7 @@ contract HyFiHookGetPricesTest is HyFiHookSharedSetup {
         assertEq(out.length, 1);
         assertEq(out[0].bidPriceX96, 0);
         assertEq(out[0].spreadX96, 0);
-        assertEq(out[0].lastUpdate, 0);
+        assertEq(out[0].timestamp, 0);
     }
 
     function test_getPrices_multiplePools() public {
@@ -38,12 +38,9 @@ contract HyFiHookGetPricesTest is HyFiHookSharedSetup {
         // Set prices on `other` too
         PoolId[] memory sp = new PoolId[](1);
         sp[0] = other;
-        uint112[] memory bids = new uint112[](1);
-        bids[0] = uint112(2 * Q96);
-        uint112[] memory spreads = new uint112[](1);
-        spreads[0] = uint112(Q96 / 50);
-        vm.warp(9999);
-        hook.setPrices(sp, bids, spreads);
+        HyFiHook.PriceData[] memory prices = new HyFiHook.PriceData[](1);
+        prices[0] = HyFiHook.PriceData(uint112(2 * Q96), uint112(Q96 / 50), 9999);
+        hook.setPrices(sp, prices);
 
         PoolId[] memory pids = new PoolId[](3);
         pids[0] = poolId;
@@ -55,9 +52,9 @@ contract HyFiHookGetPricesTest is HyFiHookSharedSetup {
         assertEq(out[0].bidPriceX96, BID_PRICE_X96);
         assertEq(out[1].bidPriceX96, uint112(2 * Q96));
         assertEq(out[1].spreadX96, uint112(Q96 / 50));
-        assertEq(out[1].lastUpdate, 9999);
+        assertEq(out[1].timestamp, 9999);
         assertEq(out[2].bidPriceX96, 0);
-        assertEq(out[2].lastUpdate, 0);
+        assertEq(out[2].timestamp, 0);
     }
 
     function test_getPrices_emptyArray() public view {

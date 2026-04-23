@@ -126,13 +126,7 @@ contract HyFiHookSharedSetup is Test, Utils {
         vm.stopPrank();
 
         // Set a default price
-        PoolId[] memory priceIds = new PoolId[](1);
-        priceIds[0] = poolId;
-        uint112[] memory bids = new uint112[](1);
-        bids[0] = BID_PRICE_X96;
-        uint112[] memory spreads = new uint112[](1);
-        spreads[0] = SPREAD_X96;
-        hook.setPrices(priceIds, bids, spreads);
+        setPricesSingle(hook, poolId, BID_PRICE_X96, SPREAD_X96, uint32(block.timestamp));
 
         // Set default protocol fee to 0.01%
         hook.setProtocolFee(DEFAULT_PROTOCOL_FEE_PIPS);

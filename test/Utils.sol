@@ -201,14 +201,12 @@ abstract contract Utils is StdCheats {
         console2.log(string.concat(label, ": ", formatNumToStrDecimal(amount, decimals), " ", symbol));
     }
 
-    function setPricesSingle(HyFiHook hook_, PoolId pid, uint112 bid, uint112 spread) internal {
+    function setPricesSingle(HyFiHook hook_, PoolId pid, uint112 bid, uint112 spread, uint32 timestamp) internal {
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = pid;
-        uint112[] memory bids = new uint112[](1);
-        bids[0] = bid;
-        uint112[] memory spreads = new uint112[](1);
-        spreads[0] = spread;
-        hook_.setPrices(pids, bids, spreads);
+        HyFiHook.PriceData[] memory prices = new HyFiHook.PriceData[](1);
+        prices[0] = HyFiHook.PriceData(bid, spread, timestamp);
+        hook_.setPrices(pids, prices);
     }
 
     function registerMM(HyFiHook hook_, address mm, PoolId pid, ILPQuoter q) internal {
