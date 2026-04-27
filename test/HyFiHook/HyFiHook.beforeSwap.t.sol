@@ -199,8 +199,10 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_bestQuoteWins() public {
+        // mm1 already registered with SimpleQuoter (BASE_FEE=500)
+        // Add mm2 with same quoter — both should have same price, mm1 wins (first found)
         address mm2 = makeAddr("mm2");
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
         fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
@@ -217,6 +219,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
 
         swap(UNIVERSAL_ROUTER, poolKey, true, -int256(amountIn));
 
+        // Both quoters return the same output, so the first one (mm1) should win
         assertEq(hook.protocolFees(native) - protocolFees0Before, protocolCut, "protocol fee accrues on input side");
         assertEq(hook.protocolFees(usdc), 0, "no protocol fees on output side");
         assertEq(trader0Before - native.balanceOfSelf(), amountIn, "trader token0 spent");
@@ -234,7 +237,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     function test_beforeSwap_tiedQuote_firstMMWins() public {
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
         uint256 amountIn = 1e18;
@@ -517,7 +520,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
 
     function test_beforeSwap_betterQuoterWins_exactIn_zeroForOne() public {
         address mm2 = makeAddr("mm2");
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, 0, 0);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, 0, 0);
         fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
@@ -541,8 +544,9 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     }
 
     function test_beforeSwap_betterQuoterWins_exactOut_zeroForOne() public {
+        // mm2 with zero-fee SimpleQuoter requires strictly less input than mm1
         address mm2 = makeAddr("mm2");
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, 0, 0);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, 0, 0);
         fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
@@ -570,8 +574,9 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_revertingQuoterSkipped() public {
+        // Add mm2 with a quoter that always reverts. mm1 should still fill the trade.
         address mm2 = makeAddr("mm2");
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
         fundMM(hook, mm2, q2, USDC_ADDR, 1_000 * 10 ** POL_DECIMALS, 1_000 * 10 ** USDC_DECIMALS);
         RevertingQuoter qRevert = new RevertingQuoter();
         registerMM(hook, mm2, poolId, ILPQuoter(address(qRevert)));
@@ -598,6 +603,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
     // =====================================================================
 
     function test_beforeSwap_RevertWhen_allQuotersRevert() public {
+        // Replace mm1's quoter with a reverting one
         RevertingQuoter qRevert = new RevertingQuoter();
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = poolId;
@@ -626,7 +632,7 @@ contract HyFiHookBeforeSwapTest is HyFiHookSharedSetup {
         // so the inventory check skips it and mm1 wins with its worse quote.
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, 0, 0);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, 0, 0);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
         uint256 amountIn = 1e18;

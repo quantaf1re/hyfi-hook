@@ -16,6 +16,7 @@ import {StdCheats} from "forge-std/StdCheats.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {HyFiHook} from "../src/HyFiHook.sol";
 import {ILPQuoter} from "../src/interfaces/ILPQuoter.sol";
 import {SimpleQuoter} from "../src/SimpleQuoter.sol";
@@ -225,6 +226,22 @@ abstract contract Utils is StdCheats {
         hook_.deregisterPools(pids);
     }
 
+    /// @dev Deploy a SimpleQuoter behind a TransparentUpgradeableProxy (matches on-chain pattern).
+    function deployQuoterProxy(
+        IPoolManager pm_,
+        address hook_,
+        address ownerAddr,
+        uint baseFee,
+        uint feePerSecond
+    ) internal returns (SimpleQuoter) {
+        SimpleQuoter impl = new SimpleQuoter();
+        bytes memory initData = abi.encodeCall(
+            SimpleQuoter.initialize, (pm_, hook_, ownerAddr, baseFee, feePerSecond)
+        );
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(impl), ownerAddr, initData);
+        return SimpleQuoter(payable(address(proxy)));
+    }
+
     function fundMM(
         HyFiHook hook_,
         address mm,
@@ -237,9 +254,9 @@ abstract contract Utils is StdCheats {
         _cheats.deal(mm, nativeAm);
         deal(token, mm, tokenAm);
         _cheats.startPrank(mm);
-        q.deposit{value: nativeAm}(Currency.wrap(address(0)), nativeAm);
+        q.depositTo6909{value: nativeAm}(Currency.wrap(address(0)), nativeAm);
         IERC20(token).approve(address(q), tokenAm);
-        q.deposit(Currency.wrap(token), tokenAm);
+        q.depositTo6909(Currency.wrap(token), tokenAm);
         _cheats.stopPrank();
     }
 }

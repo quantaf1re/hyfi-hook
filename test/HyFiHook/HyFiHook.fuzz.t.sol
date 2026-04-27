@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
 import {HyFiHookSharedSetup} from "../HyFiHookSharedSetup.sol";
@@ -27,9 +26,9 @@ contract HyFiHookFuzzTest is HyFiHookSharedSetup {
         vm.deal(mm1, EXTRA_NATIVE);
         deal(USDC_ADDR, mm1, EXTRA_USDC);
         vm.startPrank(mm1);
-        quoter.deposit{value: EXTRA_NATIVE}(native, EXTRA_NATIVE);
+        quoter.depositTo6909{value: EXTRA_NATIVE}(native, EXTRA_NATIVE);
         IERC20(USDC_ADDR).approve(address(quoter), EXTRA_USDC);
-        quoter.deposit(usdc, EXTRA_USDC);
+        quoter.depositTo6909(usdc, EXTRA_USDC);
         vm.stopPrank();
 
         // Give the trader (this contract) plenty of balance for any exact-output bound.
@@ -177,7 +176,7 @@ contract HyFiHookFuzzTest is HyFiHookSharedSetup {
 
         // Deploy a second MM + quoter with baseFee2.
         address mm2 = makeAddr("mm2-fuzz");
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, baseFee2, 0);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, baseFee2, 0);
         fundMM(hook, mm2, q2, USDC_ADDR, 1_000e18, 1_000e6);
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 

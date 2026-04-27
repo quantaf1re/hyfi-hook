@@ -18,7 +18,7 @@ contract HyFiHookRegisterPoolsTest is HyFiHookSharedSetup {
     function test_registerPools_addsMMToPool() public {
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
 
         registerMM(hook, mm2, poolId, ILPQuoter(address(q2)));
 
@@ -33,7 +33,7 @@ contract HyFiHookRegisterPoolsTest is HyFiHookSharedSetup {
     function test_registerPools_multiplePools() public {
         address mm2 = makeAddr("mm2");
         hook.addToWhitelist(mm2);
-        SimpleQuoter q2 = new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q2 = deployQuoterProxy(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
 
         PoolId otherId = PoolId.wrap(keccak256("other"));
 
@@ -92,7 +92,7 @@ contract HyFiHookRegisterPoolsTest is HyFiHookSharedSetup {
         for (uint i = 0; i < 9; i++) {
             address mm = makeAddr(string(abi.encodePacked("mmExtra", i)));
             hook.addToWhitelist(mm);
-            SimpleQuoter q = new SimpleQuoter(pm, address(hook), mm, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+            SimpleQuoter q = deployQuoterProxy(pm, address(hook), mm, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
             registerMM(hook, mm, poolId, ILPQuoter(address(q)));
         }
         assertEq(hook.getMMCount(poolId), 10);
@@ -100,7 +100,7 @@ contract HyFiHookRegisterPoolsTest is HyFiHookSharedSetup {
         // 11th should revert
         address mm11 = makeAddr("mm11");
         hook.addToWhitelist(mm11);
-        SimpleQuoter q11 = new SimpleQuoter(pm, address(hook), mm11, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
+        SimpleQuoter q11 = deployQuoterProxy(pm, address(hook), mm11, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND);
 
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = poolId;

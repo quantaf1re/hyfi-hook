@@ -11,11 +11,11 @@ contract DepositTo6909 is Script, Utils {
     address public deployer = vm.addr(deployerPrivateKey);
 
     // MM's own SimpleQuoter (holds the 6909 inventory). Set to the deployed quoter address.
-    SimpleQuoter public quoter = SimpleQuoter(payable(address(0)));
-    IERC20 public token = IERC20(ADDR_ZERO);
-    uint256 public amount = 72_000e18;
-    // IERC20 public token = IERC20(0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359);
-    // uint256 public amount = 6000e6;
+    SimpleQuoter public quoter = SimpleQuoter(payable(0x722756f53bb4C42Ea3E53e4BbfA3A457cfa9aB27));
+    // IERC20 public token = IERC20(ADDR_ZERO);
+    // uint256 public amount = 72_000e18;
+    IERC20 public token = IERC20(0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359);
+    uint256 public amount = 6000e6;
 
     function run() public {
         Currency currency = Currency.wrap(address(token));
@@ -33,7 +33,7 @@ contract DepositTo6909 is Script, Utils {
             }
         }
 
-        quoter.deposit{value: address(token) == ADDR_ZERO ? amount : 0}(currency, amount);
+        quoter.depositTo6909{value: address(token) == ADDR_ZERO ? amount : 0}(currency, amount);
 
         vm.stopBroadcast();
 

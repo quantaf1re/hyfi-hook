@@ -18,3 +18,8 @@ remappings = [
     "permit2/=lib/v4-periphery/lib/permit2/",
     "hookmate/=lib/hookmate/src/",
 ]
+
+[rpc_endpoints]
+eth = "${MAINNET_RPC_URL}"
+matic = "${POLYGON_RPC_URL}"
+base = "${RPC_URL_BASE}"

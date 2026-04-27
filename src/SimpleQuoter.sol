@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
@@ -17,9 +17,10 @@ import {ILPQuoter} from "./interfaces/ILPQuoter.sol";
 ///         ERC6909 claims held at its own address on the PoolManager. During swaps, the HyFiHook is a
 ///         pre-approved PM operator of this contract's 6909 balances, which lets the hook burn
 ///         output-side claims to settle swap deltas without any cross-contract token movement.
-/// @dev    The quoter is independent of the hook's registry: an MM can update to a different quoter on
-///         the hook side and still withdraw from this one at any time, since the hook never had custody.
-contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
+/// @dev    Upgradeable via TransparentUpgradeableProxy. The implementation's constructor disables
+///         initializers; the proxy calls `initialize(...)` once to set up pm/hook/owner/fees and
+///         authorises the hook as a PM operator of the proxy's 6909 balances.
+contract SimpleQuoter is ILPQuoter, IUnlockCallback, Initializable, OwnableUpgradeable {
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
 
@@ -27,8 +28,8 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
     uint internal constant FEE_DENOM = 1_000_000;
     uint internal constant Q96       = 1 << 96;
 
-    IPoolManager public immutable pm;
-    address      public immutable hook;
+    IPoolManager public pm;
+    address      public hook;
 
     uint public baseFee;
     uint public feePerSecond;
@@ -47,8 +48,19 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
         _;
     }
 
-    constructor(IPoolManager _pm, address _hook, address _owner, uint _baseFee, uint _feePerSecond) Ownable(_owner) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
+        IPoolManager _pm,
+        address _hook,
+        address _owner,
+        uint _baseFee,
+        uint _feePerSecond
+    ) external initializer {
         if (_baseFee > MAX_FEE) revert FeeTooHigh();
+        __Ownable_init(_owner);
         pm           = _pm;
         hook         = _hook;
         baseFee      = _baseFee;
@@ -72,7 +84,7 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
 
     /// @notice Pull `amount` of `currency` from the owner and mint ERC6909 claims to this contract.
     /// @dev    For native, call with `msg.value == amount`. For ERC20, owner must have approved this contract.
-    function deposit(Currency currency, uint amount) external payable onlyOwner {
+    function depositTo6909(Currency currency, uint amount) external payable onlyOwner {
         if (currency.isAddressZero()) {
             if (msg.value != amount) revert BadMsgValue();
         } else {
@@ -84,7 +96,7 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Ownable {
     }
 
     /// @notice Burn `amount` of this contract's ERC6909 claims and send the underlying to `to`.
-    function withdraw(Currency currency, uint amount, address to) external onlyOwner {
+    function withdrawFrom6909(Currency currency, uint amount, address to) external onlyOwner {
         pm.unlock(abi.encode(false, currency, amount, to));
         emit Withdrawn(currency, amount, to);
     }

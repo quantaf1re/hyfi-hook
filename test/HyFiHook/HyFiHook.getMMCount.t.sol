@@ -27,8 +27,8 @@ contract HyFiHookGetMMCountTest is HyFiHookSharedSetup {
         address mm3 = makeAddr("mm3");
         hook.addToWhitelist(mm2);
         hook.addToWhitelist(mm3);
-        registerMM(hook, mm2, poolId, ILPQuoter(address(new SimpleQuoter(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND))));
-        registerMM(hook, mm3, poolId, ILPQuoter(address(new SimpleQuoter(pm, address(hook), mm3, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND))));
+        registerMM(hook, mm2, poolId, ILPQuoter(address(deployQuoterProxy(pm, address(hook), mm2, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND))));
+        registerMM(hook, mm3, poolId, ILPQuoter(address(deployQuoterProxy(pm, address(hook), mm3, DEFAULT_BASE_FEE, DEFAULT_FEE_PER_SECOND))));
 
         assertEq(hook.getMMCount(poolId), 3);
     }

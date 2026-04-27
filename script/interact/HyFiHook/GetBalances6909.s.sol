@@ -7,7 +7,7 @@ import {AddressConstants} from "hookmate/constants/AddressConstants.sol";
 import {Utils} from "../../../test/Utils.sol";
 
 contract GetBalances6909 is Script, Utils {
-    address public hook = 0x23bECbf4bA776B910E105A20060e47ae43020888;
+    address public quoter = 0x722756f53bb4C42Ea3E53e4BbfA3A457cfa9aB27;
     IPoolManager public pm = IPoolManager(AddressConstants.getPoolManagerAddress(block.chainid));
 
     // Default: native (address(0)) and USDC on Polygon
@@ -17,8 +17,8 @@ contract GetBalances6909 is Script, Utils {
     uint8 public constant NATIVE_DECIMALS = 18;
 
     function run() public view {
-        uint256 bal0 = pm.balanceOf(hook, uint256(uint160(token0)));
-        uint256 bal1 = pm.balanceOf(hook, uint256(uint160(token1)));
+        uint256 bal0 = pm.balanceOf(quoter, uint256(uint160(token0)));
+        uint256 bal1 = pm.balanceOf(quoter, uint256(uint160(token1)));
 
         (string memory sym0, uint8 dec0) = token0 == ADDR_ZERO
             ? (nativeSymbol, NATIVE_DECIMALS)
@@ -28,7 +28,7 @@ contract GetBalances6909 is Script, Utils {
             : (IERC20Metadata(token1).symbol(), IERC20Metadata(token1).decimals());
 
         console2.log("=== 6909 Balances ===");
-        console2.log("Hook:", hook);
+        console2.log("Quoter:", quoter);
         console2.log("PoolManager:", address(pm));
         logTokenBal("Token0", sym0, bal0, dec0);
         logTokenBal("Token1", sym1, bal1, dec1);
