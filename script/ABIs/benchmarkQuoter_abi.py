@@ -3,12 +3,12 @@ BENCHMARK_QUOTER_ABI = """[
     "type": "constructor",
     "inputs": [
       {
-        "name": "_quoterV2",
+        "name": "v4Quoter_",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "_v4Quoter",
+        "name": "quoterV2_",
         "type": "address",
         "internalType": "address"
       }
@@ -17,7 +17,7 @@ BENCHMARK_QUOTER_ABI = """[
   },
   {
     "type": "function",
-    "name": "quoteAll",
+    "name": "batchQuote",
     "inputs": [
       {
         "name": "pools",
@@ -112,7 +112,7 @@ BENCHMARK_QUOTER_ABI = """[
   },
   {
     "type": "function",
-    "name": "quoterV2",
+    "name": "getQuoterV2",
     "inputs": [],
     "outputs": [
       {
@@ -125,7 +125,7 @@ BENCHMARK_QUOTER_ABI = """[
   },
   {
     "type": "function",
-    "name": "v4Quoter",
+    "name": "getV4Quoter",
     "inputs": [],
     "outputs": [
       {
@@ -135,5 +135,141 @@ BENCHMARK_QUOTER_ABI = """[
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "junkA",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "junkB",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "junkC",
+    "inputs": [
+      {
+        "name": "n",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "junkD",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "b",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "junkE",
+    "inputs": [
+      {
+        "name": "seed",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "junkF",
+    "inputs": [
+      {
+        "name": "xs",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "sum",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "product",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "junkG",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "pure"
   }
 ]"""

@@ -7,12 +7,12 @@ import {AddressConstants} from "hookmate/constants/AddressConstants.sol";
 import {Utils} from "../../../test/Utils.sol";
 
 contract GetBalances6909 is Script, Utils {
-    address public quoter = 0x722756f53bb4C42Ea3E53e4BbfA3A457cfa9aB27;
+    address public quoter = 0xBeE34963e519D8A24d35983219812173fc34BDF5;
     IPoolManager public pm = IPoolManager(AddressConstants.getPoolManagerAddress(block.chainid));
 
-    // Default: native (address(0)) and USDC on Polygon
+    // Default: native (address(0)) and USDC on Base
     address public token0 = address(0);
-    address public token1 = 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359;
+    address public token1 = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     string public nativeSymbol = "NATIVE";
     uint8 public constant NATIVE_DECIMALS = 18;
 

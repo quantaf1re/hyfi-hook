@@ -24,10 +24,8 @@ contract HyFiHookInitializeTest is HyFiHookSharedSetup {
         HyFiHook h = HyFiHook(payable(address(proxy)));
 
         assertEq(h.owner(), expectedOwner, "owner should be set");
-        assertEq(address(h.pm()), address(pm), "pm should be set");
-        assertEq(h.protocolFeePips(), 0, "protocol fee starts at 0");
-        assertFalse(h.whitelisted(expectedOwner), "owner not auto-whitelisted");
-        assertFalse(h.whitelisted(makeAddr("random")), "random addr not whitelisted");
+        assertEq(address(h.getPm()), address(pm), "pm should be set");
+        assertEq(h.getProtocolFeePips(), 0, "protocol fee starts at 0");
     }
 
     // ─── Cannot initialize twice ─────────────────────────────────────────

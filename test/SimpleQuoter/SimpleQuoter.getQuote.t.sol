@@ -4,7 +4,7 @@ import {HyFiHookSharedSetup} from "../HyFiHookSharedSetup.sol";
 import {SimpleQuoter} from "../../src/SimpleQuoter.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
-contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
+contract SimpleQuoterGetQuoteTest is HyFiHookSharedSetup {
     uint256 internal BID;
     uint256 internal SPREAD;
 
@@ -18,11 +18,11 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Exact input — zeroForOne (uses bid price)
     // =====================================================================
 
-    function test_quoteTrade_exactIn_zeroForOne() public view {
+    function test_getQuote_exactIn_zeroForOne() public view {
         uint256 amountIn = 1e18;
         uint32 timestamp = uint32(block.timestamp);
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, true, -int256(amountIn), BID, SPREAD, timestamp
         );
 
@@ -38,12 +38,12 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Exact input — oneForZero (uses ask = bid + spread)
     // =====================================================================
 
-    function test_quoteTrade_exactIn_oneForZero() public view {
+    function test_getQuote_exactIn_oneForZero() public view {
         uint256 amountIn = 1e6;
         uint32 timestamp = uint32(block.timestamp);
         uint256 askPrice = BID + SPREAD;
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, false, -int256(amountIn), BID, SPREAD, timestamp
         );
 
@@ -59,11 +59,11 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Exact output — zeroForOne (uses bid price)
     // =====================================================================
 
-    function test_quoteTrade_exactOut_zeroForOne() public view {
+    function test_getQuote_exactOut_zeroForOne() public view {
         uint256 amountOut = 500_000;
         uint32 timestamp = uint32(block.timestamp);
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, true, int256(amountOut), BID, SPREAD, timestamp
         );
 
@@ -79,12 +79,12 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Exact output — oneForZero (uses ask price)
     // =====================================================================
 
-    function test_quoteTrade_exactOut_oneForZero() public view {
+    function test_getQuote_exactOut_oneForZero() public view {
         uint256 amountOut = 5e17;
         uint32 timestamp = uint32(block.timestamp);
         uint256 askPrice = BID + SPREAD;
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, false, int256(amountOut), BID, SPREAD, timestamp
         );
 
@@ -100,32 +100,32 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Staleness fee increases over time
     // =====================================================================
 
-    function test_quoteTrade_feeIncreasesWithStaleness() public {
+    function test_getQuote_feeIncreasesWithStaleness() public {
         uint256 amountIn = 1e18;
         uint32 now0 = uint32(block.timestamp);
 
-        (, uint256 outFresh) = quoter.quoteTrade(
+        (, uint256 outFresh) = quoter.getQuote(
             poolKey, true, -int256(amountIn), BID, SPREAD, now0
         );
 
         vm.warp(block.timestamp + 10);
-        (, uint256 outStale) = quoter.quoteTrade(
+        (, uint256 outStale) = quoter.getQuote(
             poolKey, true, -int256(amountIn), BID, SPREAD, now0
         );
 
         assertGt(outFresh, outStale, "stale should give less output");
     }
 
-    function test_quoteTrade_feeIncreasesExactOut() public {
+    function test_getQuote_feeIncreasesExactOut() public {
         uint256 amountOut = 500_000;
         uint32 now0 = uint32(block.timestamp);
 
-        (uint256 inFresh,) = quoter.quoteTrade(
+        (uint256 inFresh,) = quoter.getQuote(
             poolKey, true, int256(amountOut), BID, SPREAD, now0
         );
 
         vm.warp(block.timestamp + 10);
-        (uint256 inStale,) = quoter.quoteTrade(
+        (uint256 inStale,) = quoter.getQuote(
             poolKey, true, int256(amountOut), BID, SPREAD, now0
         );
 
@@ -136,7 +136,7 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Fee caps at 100%
     // =====================================================================
 
-    function test_quoteTrade_feeCapsAt100Percent_exactIn() public {
+    function test_getQuote_feeCapsAt100Percent_exactIn() public {
         uint256 amountIn = 1e18;
         uint32 now0 = uint32(block.timestamp);
 
@@ -144,10 +144,10 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
         vm.warp(block.timestamp + elapsed);
 
         vm.expectRevert(SimpleQuoter.ZeroOutput.selector);
-        quoter.quoteTrade(poolKey, true, -int256(amountIn), BID, SPREAD, now0);
+        quoter.getQuote(poolKey, true, -int256(amountIn), BID, SPREAD, now0);
     }
 
-    function test_quoteTrade_feeCapsAt100Percent_exactOut() public {
+    function test_getQuote_feeCapsAt100Percent_exactOut() public {
         uint256 amountOut = 500_000;
         uint32 now0 = uint32(block.timestamp);
 
@@ -155,31 +155,31 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
         vm.warp(block.timestamp + elapsed);
 
         vm.expectRevert();
-        quoter.quoteTrade(poolKey, true, int256(amountOut), BID, SPREAD, now0);
+        quoter.getQuote(poolKey, true, int256(amountOut), BID, SPREAD, now0);
     }
 
-    function test_quoteTrade_feeBeyond100Percent_staysAtMax() public {
+    function test_getQuote_feeBeyond100Percent_staysAtMax() public {
         uint256 amountIn = 1e18;
         uint32 now0 = uint32(block.timestamp);
 
         vm.warp(block.timestamp + 100_000);
 
         vm.expectRevert(SimpleQuoter.ZeroOutput.selector);
-        quoter.quoteTrade(poolKey, true, -int256(amountIn), BID, SPREAD, now0);
+        quoter.getQuote(poolKey, true, -int256(amountIn), BID, SPREAD, now0);
     }
 
     // =====================================================================
     //  Zero spread — bid equals ask
     // =====================================================================
 
-    function test_quoteTrade_zeroSpread() public view {
+    function test_getQuote_zeroSpread() public view {
         uint256 amountIn = 1e18;
         uint32 timestamp = uint32(block.timestamp);
 
-        (uint256 amIn1, uint256 amOut1) = quoter.quoteTrade(
+        (uint256 amIn1, uint256 amOut1) = quoter.getQuote(
             poolKey, true, -int256(amountIn), BID, 0, timestamp
         );
-        (uint256 amIn2, uint256 amOut2) = quoter.quoteTrade(
+        (uint256 amIn2, uint256 amOut2) = quoter.getQuote(
             poolKey, false, -int256(amountIn), BID, 0, timestamp
         );
 
@@ -197,30 +197,30 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Revert: zero output from tiny input
     // =====================================================================
 
-    function test_quoteTrade_RevertWhen_zeroOutput_tinyInput() public {
+    function test_getQuote_RevertWhen_zeroOutput_tinyInput() public {
         uint32 timestamp = uint32(block.timestamp);
 
         vm.expectRevert(SimpleQuoter.ZeroOutput.selector);
-        quoter.quoteTrade(poolKey, true, -1, BID, SPREAD, timestamp);
+        quoter.getQuote(poolKey, true, -1, BID, SPREAD, timestamp);
     }
 
-    function test_quoteTrade_RevertWhen_zeroOutput_10wei() public {
+    function test_getQuote_RevertWhen_zeroOutput_10wei() public {
         uint32 timestamp = uint32(block.timestamp);
 
         vm.expectRevert(SimpleQuoter.ZeroOutput.selector);
-        quoter.quoteTrade(poolKey, true, -10, BID, SPREAD, timestamp);
+        quoter.getQuote(poolKey, true, -10, BID, SPREAD, timestamp);
     }
 
     // =====================================================================
     //  Rounding: exact-out rounds up input (favours MM)
     // =====================================================================
 
-    function test_quoteTrade_exactOut_roundsUpInput() public view {
+    function test_getQuote_exactOut_roundsUpInput() public view {
         uint256 oddBid = Q96 * 3 / 7e13;
         uint256 amountOut = 100_001;
         uint32 timestamp = uint32(block.timestamp);
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, true, int256(amountOut), oddBid, 0, timestamp
         );
 
@@ -236,11 +236,11 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
     //  Large amounts
     // =====================================================================
 
-    function test_quoteTrade_largeExactIn() public view {
+    function test_getQuote_largeExactIn() public view {
         uint256 amountIn = 1_000_000e18;
         uint32 timestamp = uint32(block.timestamp);
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, true, -int256(amountIn), BID, SPREAD, timestamp
         );
 
@@ -251,11 +251,11 @@ contract SimpleQuoterQuoteTradeTest is HyFiHookSharedSetup {
         assertEq(amOut, expectedOut);
     }
 
-    function test_quoteTrade_largeExactOut() public view {
+    function test_getQuote_largeExactOut() public view {
         uint256 amountOut = 100_000e6;
         uint32 timestamp = uint32(block.timestamp);
 
-        (uint256 amIn, uint256 amOut) = quoter.quoteTrade(
+        (uint256 amIn, uint256 amOut) = quoter.getQuote(
             poolKey, true, int256(amountOut), BID, SPREAD, timestamp
         );
 

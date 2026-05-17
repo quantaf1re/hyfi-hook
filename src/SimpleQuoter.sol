@@ -24,15 +24,14 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Initializable, OwnableUpgra
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
 
-    uint internal constant MAX_FEE   = 1_000_000;  // 100 % cap
-    uint internal constant FEE_DENOM = 1_000_000;
+    uint internal constant FEE_DENOM = 1_000_000;  // 100 % cap
     uint internal constant Q96       = 1 << 96;
 
-    IPoolManager public pm;
-    address      public hook;
+    IPoolManager private _pm;
+    address      private _hookAddr;
 
-    uint public baseFee;
-    uint public feePerSecond;
+    uint private _baseFee;
+    uint private _feePerSecond;
 
     error ZeroOutput();
     error FeeTooHigh();
@@ -44,7 +43,7 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Initializable, OwnableUpgra
     event Withdrawn(Currency indexed currency, uint amount, address indexed to);
 
     modifier onlyPM() {
-        if (msg.sender != address(pm)) revert OnlyPoolManager();
+        if (msg.sender != address(_pm)) revert OnlyPoolManager();
         _;
     }
 
@@ -52,52 +51,57 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Initializable, OwnableUpgra
         _disableInitializers();
     }
 
+    function getPm() external view returns (IPoolManager) { return _pm; }
+    function getHook() external view returns (address) { return _hookAddr; }
+    function getBaseFee() external view returns (uint) { return _baseFee; }
+    function getFeePerSecond() external view returns (uint) { return _feePerSecond; }
+
     function initialize(
-        IPoolManager _pm,
-        address _hook,
-        address _owner,
-        uint _baseFee,
-        uint _feePerSecond
+        IPoolManager pm_,
+        address hook_,
+        address owner_,
+        uint baseFee_,
+        uint feePerSecond_
     ) external initializer {
-        if (_baseFee > MAX_FEE) revert FeeTooHigh();
-        __Ownable_init(_owner);
-        pm           = _pm;
-        hook         = _hook;
-        baseFee      = _baseFee;
-        feePerSecond = _feePerSecond;
+        __Ownable_init(owner_);
+        if (baseFee_ > FEE_DENOM) revert FeeTooHigh();
+        _feePerSecond = feePerSecond_;
+        _baseFee      = baseFee_;
+        _pm           = pm_;
 
         // Authorise the hook to burn this quoter's ERC6909 balances during swap settlement.
-        _pm.setOperator(_hook, true);
+        pm_.setOperator(hook_, true);
+        _hookAddr     = hook_;
     }
 
     /// @notice Update the base fee and per-second staleness rate (in pips; FEE_DENOM = 1e6 = 100%).
-    function setFee(uint newBaseFee, uint newFeePerSecond) external onlyOwner {
-        if (newBaseFee > MAX_FEE) revert FeeTooHigh();
-        baseFee = newBaseFee;
-        feePerSecond = newFeePerSecond;
+    function updateFeeParams(uint newBaseFee, uint newFeePerSecond) external onlyOwner {
+        if (newBaseFee > FEE_DENOM) revert FeeTooHigh();
+        _feePerSecond = newFeePerSecond;
+        _baseFee = newBaseFee;
         emit FeeUpdated(newBaseFee, newFeePerSecond);
     }
 
-    // -----------------------------------------------------------------------
+    // =======================================================================
     // Custody — deposit / withdraw ERC6909 inventory
-    // -----------------------------------------------------------------------
+    // =======================================================================
 
     /// @notice Pull `amount` of `currency` from the owner and mint ERC6909 claims to this contract.
     /// @dev    For native, call with `msg.value == amount`. For ERC20, owner must have approved this contract.
-    function depositTo6909(Currency currency, uint amount) external payable onlyOwner {
-        if (currency.isAddressZero()) {
-            if (msg.value != amount) revert BadMsgValue();
-        } else {
+    function depositInventory(Currency currency, uint amount) external payable onlyOwner {
+        if (!currency.isAddressZero()) {
             if (msg.value != 0) revert BadMsgValue();
             IERC20(Currency.unwrap(currency)).transferFrom(msg.sender, address(this), amount);
+        } else {
+            if (msg.value != amount) revert BadMsgValue();
         }
-        pm.unlock(abi.encode(true, currency, amount, address(0)));
+        _pm.unlock(abi.encode(true, currency, amount, address(0)));
         emit Deposited(currency, amount);
     }
 
     /// @notice Burn `amount` of this contract's ERC6909 claims and send the underlying to `to`.
-    function withdrawFrom6909(Currency currency, uint amount, address to) external onlyOwner {
-        pm.unlock(abi.encode(false, currency, amount, to));
+    function withdrawInventory(Currency currency, uint amount, address to) external onlyOwner {
+        _pm.unlock(abi.encode(false, currency, amount, to));
         emit Withdrawn(currency, amount, to);
     }
 
@@ -106,25 +110,25 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Initializable, OwnableUpgra
         (bool isDeposit, Currency currency, uint amount, address to) =
             abi.decode(data, (bool, Currency, uint, address));
 
-        if (isDeposit) {
-            // Pay tokens to PM from this contract's balance, mint 6909 to self.
-            currency.settle(pm, address(this), amount, false);
-            currency.take(pm, address(this), amount, true);
-        } else {
+        if (!isDeposit) {
             // Burn self's 6909, release underlying to `to`.
-            currency.settle(pm, address(this), amount, true);
-            currency.take(pm, to, amount, false);
+            currency.settle(_pm, address(this), amount, true);
+            currency.take(_pm, to, amount, false);
+        } else {
+            // Pay tokens to PM from this contract's balance, mint 6909 to self.
+            currency.settle(_pm, address(this), amount, false);
+            currency.take(_pm, address(this), amount, true);
         }
         return "";
     }
 
     receive() external payable {}
 
-    // -----------------------------------------------------------------------
+    // =======================================================================
     // ILPQuoter
-    // -----------------------------------------------------------------------
+    // =======================================================================
 
-    function quoteTrade(
+    function getQuote(
         PoolKey calldata,
         bool zeroForOne,
         int256 amountSpecified,
@@ -132,27 +136,117 @@ contract SimpleQuoter is ILPQuoter, IUnlockCallback, Initializable, OwnableUpgra
         uint256 spreadX96,
         uint32 timestamp
     ) external view override returns (uint256 amIn, uint256 amOut) {
-        uint effectivePriceX96 = zeroForOne ? bidPriceX96 : bidPriceX96 + spreadX96;
         uint fee = _fee(timestamp);
+        uint effectivePriceX96 = zeroForOne ? bidPriceX96 : bidPriceX96 + spreadX96;
 
-        if (amountSpecified < 0) {
+        if (amountSpecified >= 0) {
+            amOut = uint(amountSpecified);
+            uint amInBeforeFee = zeroForOne
+                ? FullMath.mulDivRoundingUp(amOut, Q96, effectivePriceX96)
+                : FullMath.mulDivRoundingUp(amOut, effectivePriceX96, Q96);
+            amIn = FullMath.mulDivRoundingUp(amInBeforeFee, FEE_DENOM, FEE_DENOM - fee);
+        } else {
             amIn = uint(-amountSpecified);
             uint amInAfterFee = amIn * (FEE_DENOM - fee) / FEE_DENOM;
             amOut = zeroForOne
                 ? FullMath.mulDiv(amInAfterFee, effectivePriceX96, Q96)
                 : FullMath.mulDiv(amInAfterFee, Q96, effectivePriceX96);
             if (amOut == 0) revert ZeroOutput();
-        } else {
-            amOut = uint(amountSpecified);
-            uint amInBeforeFee = zeroForOne
-                ? FullMath.mulDivRoundingUp(amOut, Q96, effectivePriceX96)
-                : FullMath.mulDivRoundingUp(amOut, effectivePriceX96, Q96);
-            amIn = FullMath.mulDivRoundingUp(amInBeforeFee, FEE_DENOM, FEE_DENOM - fee);
         }
     }
 
     function _fee(uint32 timestamp) internal view returns (uint fee) {
-        uint f = baseFee + (block.timestamp - uint(timestamp)) * feePerSecond;
-        fee = f > MAX_FEE ? MAX_FEE : f;
+        uint f = (block.timestamp - uint(timestamp)) * _feePerSecond + _baseFee;
+        fee = f > FEE_DENOM ? FEE_DENOM : f;
+    }
+
+    // =======================================================================
+    // Junk
+    // =======================================================================
+
+    function junkA(address, uint) external pure returns (uint) {
+        uint x;
+        for (uint i = 0; i < 100; i++) {
+            x = i * i;
+            if (x % 10 != 0) {
+                x *= 2;
+            } else {
+                x /= 3;
+            }
+        }
+        return x;
+    }
+
+    function junkB() external pure returns (string memory) {
+        string memory s = "This is some junk code to increase the bytecode size of the SimpleQuoter implementation contract.";
+        for (uint i = 0; i < 10; i++) {
+            s = string(abi.encodePacked(s, " More junk code."));
+        }
+        return s;
+    }
+
+    function junkC(uint n) external pure returns (uint) {
+        uint result = 1;
+        for (uint i = 1; i <= n; i++) {
+            if (result > 1e18) {
+                result /= 1e18;
+            }
+            result *= i;
+        }
+        return result;
+    }
+
+    function junkD(uint a, uint b) external pure returns (uint) {
+        uint acc;
+        for (uint i = 0; i < 64; i++) {
+            uint x = (a ^ (b << (i % 32))) + i;
+            if (x % 5 == 0) {
+                acc += x >> 2;
+            } else if (x % 7 == 0) {
+                acc ^= x * 13;
+            } else {
+                acc -= x & 0xff;
+            }
+        }
+        return acc;
+    }
+
+    function junkE(bytes32 seed) external pure returns (bytes32) {
+        bytes32 h = seed;
+        for (uint i = 0; i < 32; i++) {
+            h = keccak256(abi.encodePacked(h, i));
+            if (uint256(h) % 3 == 0) {
+                h = bytes32(uint256(h) ^ uint256(seed));
+            }
+        }
+        return h;
+    }
+
+    function junkF(uint[] memory xs) external pure returns (uint sum, uint product) {
+        product = 1;
+        for (uint i = 0; i < xs.length; i++) {
+            if (i % 4 == 3) {
+                sum ^= (product >> 1);
+            }
+            sum += xs[i];
+            if (xs[i] != 0 && product < 1e30) {
+                product *= xs[i];
+            }
+        }
+    }
+
+    function junkG() external pure returns (uint[] memory) {
+        uint[] memory out = new uint[](16);
+        out[1] = 1;
+        out[0] = 1;
+        for (uint i = 2; i < 16; i++) {
+            out[i] = out[i - 1] + out[i - 2];
+            if (out[i] % 2 != 0) {
+                out[i] ^= i;
+            } else {
+                out[i] += i * i;
+            }
+        }
+        return out;
     }
 }

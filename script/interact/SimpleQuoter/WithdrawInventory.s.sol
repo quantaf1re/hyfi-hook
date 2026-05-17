@@ -5,7 +5,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {SimpleQuoter} from "../../../src/SimpleQuoter.sol";
 import {Utils} from "../../../test/Utils.sol";
 
-contract WithdrawFrom6909 is Script, Utils {
+contract WithdrawInventory is Script, Utils {
     uint256 public deployerPrivateKey = vm.envUint("PRIVATE_KEY_HYFIHOOK_DEPLOYER");
     address public deployer = vm.addr(deployerPrivateKey);
 
@@ -23,7 +23,7 @@ contract WithdrawFrom6909 is Script, Utils {
         console2.log("Amount: %e", amount);
 
         vm.startBroadcast(deployerPrivateKey);
-        quoter.withdrawFrom6909(currency, amount, deployer);
+        quoter.withdrawInventory(currency, amount, deployer);
         vm.stopBroadcast();
 
         console2.log("Withdraw successful");

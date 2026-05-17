@@ -5,7 +5,7 @@ import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol
 import {HyFiHook} from "../../../src/HyFiHook.sol";
 import {Utils} from "../../../test/Utils.sol";
 
-contract WithdrawToken is Script, Utils {
+contract RescueToken is Script, Utils {
     using CurrencyLibrary for Currency;
 
     uint256 public deployerPrivateKey = vm.envUint("PRIVATE_KEY_HYFIHOOK_DEPLOYER");
@@ -18,15 +18,15 @@ contract WithdrawToken is Script, Utils {
     function run() public {
         uint256 amount = currency.balanceOf(address(hook));
 
-        console2.log("=== WithdrawToken ===");
+        console2.log("=== RescueToken ===");
         console2.log("Hook:", address(hook));
         console2.log("Token:", Currency.unwrap(currency));
         console2.log("Amount: %e", amount);
 
         vm.startBroadcast(deployerPrivateKey);
-        hook.withdrawToken(currency, amount);
+        hook.rescueToken(currency, amount);
         vm.stopBroadcast();
 
-        console2.log("WithdrawToken successful");
+        console2.log("RescueToken successful");
     }
 }

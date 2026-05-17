@@ -6,7 +6,7 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 /// @dev Quoter that always reverts — used to test skip-on-revert behavior.
 contract RevertingQuoter is ILPQuoter {
     error AlwaysReverts();
-    function quoteTrade(PoolKey calldata, bool, int256, uint256, uint256, uint32)
+    function getQuote(PoolKey calldata, bool, int256, uint256, uint256, uint32)
         external pure returns (uint256, uint256)
     {
         revert AlwaysReverts();

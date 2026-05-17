@@ -17,19 +17,6 @@ contract DeployHyFiHook is Script, Utils {
     // Foundry's deterministic CREATE2 deployer used during broadcast
     address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
-
-
-
-    
-    // NOTE!!!!! next deploy, use new key and binance deposit address
-
-
-
-
-
-
-
-
     uint256 public deployerPrivateKey = vm.envUint("PRIVATE_KEY_HYFIHOOK_DEPLOYER");
     address public deployer = vm.addr(deployerPrivateKey);
     address public owner = deployer;
@@ -81,10 +68,10 @@ contract DeployHyFiHook is Script, Utils {
         console2.log("\n=== Deployment Verification ===");
         HyFiHook hook = HyFiHook(payable(address(proxy)));
         console2.log("Hook owner:", hook.owner());
-        console2.log("Hook PoolManager:", address(hook.pm()));
+        console2.log("Hook PoolManager:", address(hook.getPm()));
 
         require(hook.owner() == owner, "Owner not set correctly");
-        require(address(hook.pm()) == address(pm), "PoolManager not set correctly");
+        require(address(hook.getPm()) == address(pm), "PoolManager not set correctly");
         require(uint160(address(proxy)) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS, "Hook flag bits mismatch");
         console2.log("All checks passed");
 

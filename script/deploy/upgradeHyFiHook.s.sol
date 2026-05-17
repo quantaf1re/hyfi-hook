@@ -25,7 +25,7 @@ contract UpgradeHyFiHook is Script, Utils {
 
         console2.log("=== HyFiHook Upgrade Script ===");
         console2.log("Owner:", hook.owner());
-        console2.log("PoolManager:", address(hook.pm()));
+        console2.log("PoolManager:", address(hook.getPm()));
         console2.log("Sender:", sender);
         console2.log("Proxy:", proxy);
         console2.log("ProxyAdmin:", address(proxyAdmin));
@@ -43,7 +43,7 @@ contract UpgradeHyFiHook is Script, Utils {
 
         console2.log("=== Post-upgrade Verification ===");
         console2.log("Owner:", hook.owner());
-        console2.log("PoolManager:", address(hook.pm()));
+        console2.log("PoolManager:", address(hook.getPm()));
         console2.log("Implementation now points to:", address(newImpl));
     }
 }

@@ -4,7 +4,7 @@ benchmark.py — Poll BenchmarkQuoter every 10s and log quotes to CSV.
 
 Usage:
     cd hyfi-hook
-    python script/benchmark/benchmark.py -c V3_POL-USDC_0.05% V4_HyFiHook_POL-USDC V3_POL-USDT_0.05%
+    python script/benchmark/benchmark.py --chain MATIC --cex-symbol POLUSDC -c V3_POL-USDC_0.05% V4_HyFiHook_POL-USDC V3_POL-USDT_0.05%
 """
 
 import argparse
@@ -22,23 +22,20 @@ from web3.middleware import ExtraDataToPOAMiddleware
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from ABIs.benchmarkQuoter_abi import BENCHMARK_QUOTER_ABI
-from sync_configs import CHAIN_NAME_TO_ADDRS, CHAIN_TO_SYM_TO_TOKEN, BENCHMARK_CONFIGS
+from sync_configs import (
+    CHAIN_NAME_TO_ADDRS, CHAIN_NAME_TO_RPC_ENV, CHAIN_TO_SYM_TO_TOKEN, BENCHMARK_CONFIGS,
+)
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 load_dotenv()
 
-CHAIN = 'MATIC'
-RPC_URL = os.getenv('RPC_URL_MATIC')
-BENCHMARK_QUOTER_ADDR = '0xa6B8812cD3C76eb31Ee8D40d259fDD48cB554e0a' # MATIC
 POLL_INTERVAL = 10  # seconds
 ADDR_ZERO   = '0x0000000000000000000000000000000000000000'
 NATIVE_DECS = 18
 
-# USD_AMOUNTS = [100, 1_000, 10_000]
-USD_AMOUNTS = [6000]
-CEX_SYMBOL = 'POLUSDC'  # Binance spot symbol: base priced in quote
+USD_AMOUNTS = [100, 1_000, 5_000]
 
 CSV_HEADERS = [
     'timestamp', 'block', 'pool', 'input_usd',
@@ -83,7 +80,7 @@ def build_amounts(base_price, pool_configs):
 
 
 def poll_once(contract, w3, pool_configs, pools, amts_0to1, amts_1to0):
-    """Call quoteAll and return one CSV row per pool per USD amount.
+    """Call batchQuote and return one CSV row per pool per USD amount.
 
     Each row contains both the sell and buy side:
       sell = trader sells base for quote  (e.g. sell POL for USDC)
@@ -93,7 +90,7 @@ def poll_once(contract, w3, pool_configs, pools, amts_0to1, amts_1to0):
     block = w3.eth.block_number
     ts = datetime.now(timezone.utc).isoformat(timespec='seconds')
 
-    outs_0to1, outs_1to0 = contract.functions.quoteAll(
+    outs_0to1, outs_1to0 = contract.functions.batchQuote(
         pools, amts_0to1, amts_1to0,
     ).call(block_identifier=block)
 
@@ -146,24 +143,32 @@ def poll_once(contract, w3, pool_configs, pools, amts_0to1, amts_1to0):
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description='Benchmark HyFiHook vs Uniswap V3/V4 pools')
+    parser.add_argument('--chain', required=True, choices=sorted(BENCHMARK_CONFIGS.keys()),
+                        help='Chain name (key into BENCHMARK_CONFIGS)')
     parser.add_argument('-c', '--configs', nargs='+', required=True,
                         help='Pool names from BENCHMARK_CONFIGS in sync_configs.py')
+    parser.add_argument('--cex-symbol', required=True,
+                        help='Binance spot symbol for base price feed (e.g. ETHUSDC)')
     args = parser.parse_args()
 
-    if not RPC_URL or not BENCHMARK_QUOTER_ADDR:
-        print('Set RPC_URL_MATIC and BENCHMARK_QUOTER_ADDR in .env')
+    chain = args.chain
+    rpc_url = os.getenv(CHAIN_NAME_TO_RPC_ENV[chain])
+    benchmark_quoter_addr = CHAIN_NAME_TO_ADDRS[chain].get('benchmark_quoter', '')
+    cex_symbol = args.cex_symbol
+    if not rpc_url or not benchmark_quoter_addr:
+        print(f'Set {CHAIN_NAME_TO_RPC_ENV[chain]} in .env and benchmark_quoter address for {chain}')
         sys.exit(1)
 
     # Validate pool names
-    available = BENCHMARK_CONFIGS.get(CHAIN, {})
+    available = BENCHMARK_CONFIGS.get(chain, {})
     for name in args.configs:
         if name not in available:
             print(f"Pool '{name}' not found. Available: {', '.join(available.keys())}")
             sys.exit(1)
 
     # Resolve pool configs
-    addrs = CHAIN_NAME_TO_ADDRS[CHAIN]
-    tokens = CHAIN_TO_SYM_TO_TOKEN[CHAIN]
+    addrs = CHAIN_NAME_TO_ADDRS[chain]
+    tokens = CHAIN_TO_SYM_TO_TOKEN[chain]
 
     def tok(sym):
         if sym == 'NATIVE':
@@ -178,7 +183,7 @@ def main():
         pool_configs.append({
             'name': name,
             'tuple': (
-                pc['pool_type'], t0a, t1a, pc['fee'], pc['tick_spacing'],
+                pc['pool_type'], t0a, t1a, pc['fee'], pc['tick_spacing'] or 0,
                 addrs[pc['hooks']] if pc['hooks'] else ADDR_ZERO, pc['hook_data'],
             ),
             't0_is_base': pc['t0_is_base'],
@@ -187,13 +192,13 @@ def main():
         })
     pools = [p['tuple'] for p in pool_configs]
 
-    w3 = Web3(HTTPProvider(RPC_URL, request_kwargs={'timeout': 60}))
+    w3 = Web3(HTTPProvider(rpc_url, request_kwargs={'timeout': 60}))
     w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
     print(f'Connected to chain {w3.eth.chain_id}')
     print(f'Pools: {[p["name"] for p in pool_configs]}')
 
     contract = w3.eth.contract(
-        address=Web3.to_checksum_address(BENCHMARK_QUOTER_ADDR),
+        address=Web3.to_checksum_address(benchmark_quoter_addr),
         abi=json.loads(BENCHMARK_QUOTER_ABI),
     )
 
@@ -211,7 +216,7 @@ def main():
 
     while True:
         try:
-            base_price = get_cex_price(CEX_SYMBOL)
+            base_price = get_cex_price(cex_symbol)
             amts_0to1, _ = build_amounts(base_price, pool_configs)
             rows = poll_once(contract, w3, pool_configs, pools, amts_0to1, amts_1to0)
 

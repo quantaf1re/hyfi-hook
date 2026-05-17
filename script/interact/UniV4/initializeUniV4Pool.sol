@@ -19,7 +19,8 @@ contract InitializeUniV4Pool is Script, Utils {
     address public sender = vm.addr(senderPrivateKey);
 
     IPoolManager public pm = IPoolManager(AddressConstants.getPoolManagerAddress(block.chainid));
-    IERC20Metadata public t1 = IERC20Metadata(0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359);            // MATIC USDC
+    // IERC20Metadata public t1 = IERC20Metadata(0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359);         // MATIC USDC
+    IERC20Metadata public t1 = IERC20Metadata(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);            // Base USDC
 
     function run() public {
         vm.startBroadcast(senderPrivateKey);
@@ -29,7 +30,7 @@ contract InitializeUniV4Pool is Script, Utils {
             currency1: Currency.wrap(address(t1)),
             fee: 0,
             tickSpacing: 1,
-            hooks: IHooks(0x23bECbf4bA776B910E105A20060e47ae43020888)
+            hooks: IHooks(0x2948AC0d34895c5449D728B6569c8Fc92B9C4888)
         });
 
         pm.initialize(poolKey, getSqrtPriceX96FromPrice(1 ether, false, 18, 18));

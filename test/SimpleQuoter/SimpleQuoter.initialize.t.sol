@@ -12,10 +12,10 @@ contract SimpleQuoterInitializeTest is HyFiHookSharedSetup {
     function test_initialize_setsState() public view {
         // Shared setup deploys `quoter` proxy with mm1 as owner
         assertEq(quoter.owner(), mm1, "owner from initialize");
-        assertEq(quoter.baseFee(), DEFAULT_BASE_FEE, "base fee from initialize");
-        assertEq(quoter.feePerSecond(), DEFAULT_FEE_PER_SECOND, "fee per second from initialize");
-        assertEq(address(quoter.pm()), address(pm), "pm from initialize");
-        assertEq(quoter.hook(), address(hook), "hook from initialize");
+        assertEq(quoter.getBaseFee(), DEFAULT_BASE_FEE, "base fee from initialize");
+        assertEq(quoter.getFeePerSecond(), DEFAULT_FEE_PER_SECOND, "fee per second from initialize");
+        assertEq(address(quoter.getPm()), address(pm), "pm from initialize");
+        assertEq(quoter.getHook(), address(hook), "hook from initialize");
     }
 
     function test_initialize_RevertWhen_baseFeeAboveMax() public {

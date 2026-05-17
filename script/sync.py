@@ -37,6 +37,8 @@ Q96 = 2 ** 96
 POOL_FEE = 0
 TICK_SPACING = 1
 BINANCE_SPOT_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
+ETH_USD_PRICE = 2300  # assumed for cost reporting
+UNCHANGED_REFRESH_S = 10  # min seconds between updatePrices calls when bid/spread are unchanged
 
 HOOK_ABI = json.loads(HYFIHOOK_ABI)
 PM_ABI = json.loads(POOLMANAGER_ABI)
@@ -216,7 +218,7 @@ def place_perps_limit(symbol, side, qty_d, price_d):
 # Core logic
 # ---------------------------------------------------------------------------
 def sync_price_if_changed(c, bids, asks, oracle_ts):
-    """Convert spot best bid/ask to Q96 and call hook.setPrices if changed.
+    """Convert spot best bid/ask to Q96 and call hook.updatePrices if changed.
     `oracle_ts` is the time (seconds since epoch) at which the orderbook was
     observed; this is the timestamp the hook stores for staleness-fee logic.
     Returns (bid_x96, spread_x96, changed_bool)."""
@@ -232,32 +234,46 @@ def sync_price_if_changed(c, bids, asks, oracle_ts):
 
     if bid_x96 == c['last_bid_x96'] and spread_x96 == c['last_spread_x96']:
         elapsed = oracle_ts - c['last_update_ts']
-        if elapsed < 10:
-            logger.debug(f"Prices unchanged and only {elapsed}s since last update, skipping setPrices")
+        if elapsed < UNCHANGED_REFRESH_S:
+            logger.debug(f"Prices unchanged and only {elapsed}s since last update, skipping updatePrices")
             return bid_x96, spread_x96, False
-        logger.info(f"Prices unchanged but {elapsed}s since last update, refreshing setPrices")
+        logger.info(f"Prices unchanged but {elapsed}s since last update, refreshing updatePrices")
     else:
         logger.info(f"Prices changed: bid {best_bid_d} ask {best_ask_d} → "
                     f"bidX96={bid_x96} spreadX96={spread_x96}")
 
-    send_tx(hook.functions.setPrices([bytes.fromhex(c['pool_id'][2:])], [(bid_x96, spread_x96, oracle_ts)]))
-    on_chain = hook.functions.getPrices([bytes.fromhex(c['pool_id'][2:])]).call()[0]
+    _, receipt = send_tx(hook.functions.updatePrices([bytes.fromhex(c['pool_id'][2:])], [(bid_x96, spread_x96, oracle_ts)]))
+    cost_eth = receipt['gasUsed'] * receipt['effectiveGasPrice'] / 1e18
+    gas_stats['total_eth'] += cost_eth
+    gas_stats['n_txs'] += 1
+    elapsed_s = max(time.time() - gas_stats['start_ts'], 1)
+    eth_per_hr = gas_stats['total_eth'] * 3600 / elapsed_s
+    eth_per_day = gas_stats['total_eth'] * 86400 / elapsed_s
+    logger.info(
+        f"updatePrices gas: this tx {cost_eth:.9f} ETH; "
+        f"cumulative {gas_stats['total_eth']:.9f} ETH ({gas_stats['n_txs']} txs over {elapsed_s / 60:.1f} min) | "
+        f"rate {eth_per_hr:.9f} ETH/hr (${eth_per_hr * ETH_USD_PRICE:.2f}/hr), "
+        f"{eth_per_day:.9f} ETH/day (${eth_per_day * ETH_USD_PRICE:.2f}/day)"
+    )
+    on_chain = hook.functions.readPrices([bytes.fromhex(c['pool_id'][2:])]).call()[0]
     c['last_update_ts'] = on_chain[2]
     c['last_bid_x96'] = bid_x96
     c['last_spread_x96'] = spread_x96
-    logger.info("setPrices tx confirmed")
+    logger.info("updatePrices tx confirmed")
     return bid_x96, spread_x96, True
 
 
-def read_hook_claims(c):
-    """Read the hook's ERC6909 claims from the PoolManager.
+def read_quoter_claims(c):
+    """Read the quoter's ERC6909 inventory from the PoolManager.
+    The SimpleQuoter custodies MM inventory as 6909 claims; the hook is a
+    pre-approved PM operator that burns these claims to settle swap output.
     Returns (base_claims_w, quote_claims_w)."""
     base_id = currency_to_id(c['base_token'].address)
     quote_id = currency_to_id(c['quote_token'].address)
-    base_w = pm.functions.balanceOf(addrs['hook'], base_id).call()
-    quote_w = pm.functions.balanceOf(addrs['hook'], quote_id).call()
+    base_w = pm.functions.balanceOf(addrs['quoter'], base_id).call()
+    quote_w = pm.functions.balanceOf(addrs['quoter'], quote_id).call()
     logger.debug(
-        f"Hook claims: base={to_unit(base_w, base_decs, c['base_sym'])}, "
+        f"Quoter claims: base={to_unit(base_w, base_decs, c['base_sym'])}, "
         f"quote={to_unit(quote_w, quote_decs, c['quote_sym'])}"
     )
     return base_w, quote_w
@@ -272,7 +288,7 @@ def hedge_if_needed(c, bids, asks, base_claims_w):
       - negative → need to BUY on perps (place limit buy just below best ask)
     """
     excess_base_d = to_decs(base_claims_w - c['am_base_target_w'], base_decs)
-    logger.debug(f"Excess base exposure: {excess_base_d} {c['base_sym']} (claims {to_unit(base_claims_w, base_decs, c['base_sym'])}, target {to_unit(c['am_base_target_w'], base_decs, c['base_sym'])})")
+    logger.debug(f"Excess base exposure: {excess_base_d} {c['base_sym']} (quoter claims {to_unit(base_claims_w, base_decs, c['base_sym'])}, target {to_unit(c['am_base_target_w'], base_decs, c['base_sym'])})")
     perps_pos_d = get_perps_position_amt(c['perps_pair'])
     logger.debug(f"Current perps position: {perps_pos_d} {c['base_sym']}")
     hedge_remaining_d = excess_base_d + perps_pos_d
@@ -398,7 +414,7 @@ c['pool_id'] = calculate_pool_id(c['t0'].address, c['t1'].address, POOL_FEE)
 logger.info(f"Pool ID: {c['pool_id']}")
 
 # Read current on-chain price as starting state (handles restarts)
-on_chain = hook.functions.getPrices([bytes.fromhex(c['pool_id'][2:])]).call()[0]
+on_chain = hook.functions.readPrices([bytes.fromhex(c['pool_id'][2:])]).call()[0]
 c['last_bid_x96'] = on_chain[0]
 c['last_spread_x96'] = on_chain[1]
 c['last_update_ts'] = on_chain[2]
@@ -429,6 +445,9 @@ logger.info(
     f"step={c['perps_step_size']}, min_qty={c['perps_min_qty']}"
 )
 
+# Cumulative gas tracker for updatePrices txs
+gas_stats = {'total_eth': 0.0, 'n_txs': 0, 'start_ts': time.time()}
+
 
 # ---------------------------------------------------------------------------
 # Main loop
@@ -443,13 +462,13 @@ while True:
         # 2. Sync hook price if spot moved
         bid_x96, spread_x96, price_changed = sync_price_if_changed(c, bids, asks, oracle_ts)
 
-        # # 3. Read hook claims to detect trades
-        # base_claims_w, quote_claims_w = read_hook_claims(c)
+        # # 3. Read quoter claims to detect trades
+        # base_claims_w, quote_claims_w = read_quoter_claims(c)
 
         # # 4. Hedge exposure delta via perps
         # hedge_if_needed(c, bids, asks, base_claims_w)
 
-        time.sleep(1)
+        time.sleep(5)
 
     except Exception as e:
         logger.error(f"Error in sync loop: {str(e)}")

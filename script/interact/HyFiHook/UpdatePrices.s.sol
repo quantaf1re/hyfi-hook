@@ -5,7 +5,7 @@ import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {HyFiHook} from "../../../src/HyFiHook.sol";
 import {Utils} from "../../../test/Utils.sol";
 
-contract SetPrices is Script, Utils {
+contract UpdatePrices is Script, Utils {
     uint256 public deployerPrivateKey = vm.envUint("PRIVATE_KEY_HYFIHOOK_DEPLOYER");
     address public deployer = vm.addr(deployerPrivateKey);
 
@@ -26,7 +26,7 @@ contract SetPrices is Script, Utils {
         console2.log("Pool count:", poolIds.length);
 
         vm.startBroadcast(deployerPrivateKey);
-        hook.setPrices(poolIds, prices);
+        hook.updatePrices(poolIds, prices);
         vm.stopBroadcast();
 
         console2.log("Prices set successfully");

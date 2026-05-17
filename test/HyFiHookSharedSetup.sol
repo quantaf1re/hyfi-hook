@@ -104,32 +104,24 @@ contract HyFiHookSharedSetup is Test, Utils {
         // Initialize the pool in the PM
         pm.initialize(poolKey, SQRT_PRICE_1_1);
 
-        // Whitelist mm1 and register it for the pool
-        hook.addToWhitelist(mm1);
-
-        PoolId[] memory pids = new PoolId[](1);
-        pids[0] = poolId;
-        ILPQuoter[] memory quoters = new ILPQuoter[](1);
-        quoters[0] = ILPQuoter(address(quoter));
-
-        vm.prank(mm1);
-        hook.registerPools(pids, quoters);
+        // Set the SimpleQuoter as the default quoter for the pool
+        setDefaultQuoterSingle(hook, poolId, ILPQuoter(address(quoter)));
 
         // Fund mm1 with tokens, then deposit into the quoter (the custody contract)
         vm.deal(mm1, 1_000_000 * 10 ** POL_DECIMALS);
         deal(USDC_ADDR, mm1, 1_000_000 * 10 ** USDC_DECIMALS);
 
         vm.startPrank(mm1);
-        quoter.depositTo6909{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
+        quoter.depositInventory{value: 1_000 * 10 ** POL_DECIMALS}(native, 1_000 * 10 ** POL_DECIMALS);
         IERC20(USDC_ADDR).approve(address(quoter), 1_000 * 10 ** USDC_DECIMALS);
-        quoter.depositTo6909(usdc, 1_000 * 10 ** USDC_DECIMALS);
+        quoter.depositInventory(usdc, 1_000 * 10 ** USDC_DECIMALS);
         vm.stopPrank();
 
         // Set a default price
         setPricesSingle(hook, poolId, BID_PRICE_X96, SPREAD_X96, uint32(block.timestamp));
 
         // Set default protocol fee to 0.01%
-        hook.setProtocolFee(DEFAULT_PROTOCOL_FEE_PIPS);
+        hook.updateProtocolFee(DEFAULT_PROTOCOL_FEE_PIPS);
 
         // Approve Permit2 for USDC (enables Universal Router to pull USDC for swaps)
         IERC20(USDC_ADDR).approve(PERMIT2, type(uint256).max);

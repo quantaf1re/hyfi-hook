@@ -7,7 +7,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IUniversalRouter} from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
 import {Commands} from "@uniswap/universal-router/contracts/libraries/Commands.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
-import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
+import {IV4Router} from "@uniswap/universal-router/lib/v4-periphery/src/interfaces/IV4Router.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {console2} from "forge-std/console2.sol";
@@ -33,6 +33,16 @@ abstract contract Utils is StdCheats {
     address internal constant ADDR_ZERO      = address(0);
 
     function swap(address router, PoolKey memory key, bool zeroForOne, int256 amountSpecified) internal {
+        swap(router, key, zeroForOne, amountSpecified, "");
+    }
+
+    function swap(
+        address router,
+        PoolKey memory key,
+        bool zeroForOne,
+        int256 amountSpecified,
+        bytes memory hookData
+    ) internal {
         Currency input = zeroForOne ? key.currency0 : key.currency1;
         Currency output = zeroForOne ? key.currency1 : key.currency0;
 
@@ -56,8 +66,7 @@ abstract contract Utils is StdCheats {
                     zeroForOne: zeroForOne,
                     amountIn: amountIn,
                     amountOutMinimum: 0,
-                    minHopPriceX36: 0,
-                    hookData: ""
+                    hookData: hookData
                 })
             );
             actionParams[1] = abi.encode(input, type(uint256).max);
@@ -78,8 +87,7 @@ abstract contract Utils is StdCheats {
                     zeroForOne: zeroForOne,
                     amountOut: amountOut,
                     amountInMaximum: type(uint128).max,
-                    minHopPriceX36: 0,
-                    hookData: ""
+                    hookData: hookData
                 })
             );
             actionParams[1] = abi.encode(input, type(uint256).max);
@@ -207,23 +215,15 @@ abstract contract Utils is StdCheats {
         pids[0] = pid;
         HyFiHook.PriceData[] memory prices = new HyFiHook.PriceData[](1);
         prices[0] = HyFiHook.PriceData(bid, spread, timestamp);
-        hook_.setPrices(pids, prices);
+        hook_.updatePrices(pids, prices);
     }
 
-    function registerMM(HyFiHook hook_, address mm, PoolId pid, ILPQuoter q) internal {
+    function setDefaultQuoterSingle(HyFiHook hook_, PoolId pid, ILPQuoter q) internal {
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = pid;
         ILPQuoter[] memory quoters = new ILPQuoter[](1);
         quoters[0] = q;
-        _cheats.prank(mm);
-        hook_.registerPools(pids, quoters);
-    }
-
-    function deregisterMM(HyFiHook hook_, address mm, PoolId pid) internal {
-        PoolId[] memory pids = new PoolId[](1);
-        pids[0] = pid;
-        _cheats.prank(mm);
-        hook_.deregisterPools(pids);
+        hook_.assignDefaultQuoters(pids, quoters);
     }
 
     /// @dev Deploy a SimpleQuoter behind a TransparentUpgradeableProxy (matches on-chain pattern).
@@ -242,21 +242,20 @@ abstract contract Utils is StdCheats {
         return SimpleQuoter(payable(address(proxy)));
     }
 
-    function fundMM(
-        HyFiHook hook_,
+    /// @dev Fund an MM's quoter with native + ERC20 inventory (no hook-side registration).
+    function fundQuoter(
         address mm,
         SimpleQuoter q,
         address token,
         uint256 nativeAm,
         uint256 tokenAm
     ) internal {
-        hook_.addToWhitelist(mm);
         _cheats.deal(mm, nativeAm);
         deal(token, mm, tokenAm);
         _cheats.startPrank(mm);
-        q.depositTo6909{value: nativeAm}(Currency.wrap(address(0)), nativeAm);
+        q.depositInventory{value: nativeAm}(Currency.wrap(address(0)), nativeAm);
         IERC20(token).approve(address(q), tokenAm);
-        q.depositTo6909(Currency.wrap(token), tokenAm);
+        q.depositInventory(Currency.wrap(token), tokenAm);
         _cheats.stopPrank();
     }
 }

@@ -17,25 +17,25 @@ import {Utils} from "../../test/Utils.sol";
 ///
 /// Usage:
 ///   source .env && forge script script/benchmark/DebugBenchmarkQuote.s.sol \
-///       --rpc-url $RPC_URL_MATIC -vvvv
+///       --rpc-url $RPC_URL_BASE -vvvv
 contract DebugBenchmarkQuote is Script, Utils {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
-    IV4Quoter public v4Quoter = IV4Quoter(0xb3d5c3Dfc3a7aEbFF71895A7191796BFFc2c81b9);
+    IV4Quoter public v4Quoter = IV4Quoter(0x0d5e0F971ED27FBfF6c2837bf31316121532048D);
     IPoolManager public pm = IPoolManager(AddressConstants.getPoolManagerAddress(block.chainid));
-    HyFiHook public hook = HyFiHook(payable(0x23bECbf4bA776B910E105A20060e47ae43020888));
+    HyFiHook public hook = HyFiHook(payable(0x2948AC0d34895c5449D728B6569c8Fc92B9C4888));
 
     // HyFiHook pool key
     Currency public currency0 = Currency.wrap(address(0));                                     // Native
-    Currency public currency1 = Currency.wrap(0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359);     // USDC
+    Currency public currency1 = Currency.wrap(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);     // Base USDC
     uint24 public fee = 0;
     int24 public tickSpacing = 1;
     IHooks public hooks = IHooks(address(hook));
 
     // Quote params
-    uint128 public amountIn = 200e18;       // 200 POL (~$50)
-    bool public zeroForOne = true;          // sell POL for USDC
+    uint128 public amountIn = 0.002 ether;  // 0.002 ETH (~$5)
+    bool public zeroForOne = true;          // sell ETH for USDC
 
     function run() external {
         PoolKey memory key = PoolKey(currency0, currency1, fee, tickSpacing, hooks);
@@ -63,7 +63,7 @@ contract DebugBenchmarkQuote is Script, Utils {
         // --- Hook price state ---
         PoolId[] memory pids = new PoolId[](1);
         pids[0] = id;
-        HyFiHook.PriceData memory price = hook.getPrices(pids)[0];
+        HyFiHook.PriceData memory price = hook.readPrices(pids)[0];
         console2.log("\n=== Hook Price State ===");
         console2.log("bidPriceX96:", uint256(price.bidPriceX96));
         console2.log("spreadX96:", uint256(price.spreadX96));

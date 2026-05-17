@@ -11,7 +11,7 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 ///         - For exact-output (amountSpecified > 0): amOut MUST equal  amountSpecified.
 ///         - Revert or return amOut = 0 for unsupported pools.
 interface ILPQuoter {
-    function quoteTrade(
+    function getQuote(
         PoolKey calldata key,
         bool zeroForOne,
         int256 amountSpecified,

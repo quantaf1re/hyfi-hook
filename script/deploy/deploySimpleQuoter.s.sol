@@ -19,7 +19,7 @@ contract DeploySimpleQuoter is Script, Utils {
     using PoolIdLibrary for PoolKey;
 
     IPoolManager public pm = IPoolManager(AddressConstants.getPoolManagerAddress(block.chainid));
-    HyFiHook public hook = HyFiHook(payable(0x98F05193F13F7d38B5D02EcfA6079604AACE4888));
+    HyFiHook public hook = HyFiHook(payable(0x2948AC0d34895c5449D728B6569c8Fc92B9C4888));
 
     // SimpleQuoter fee parameters
     uint256 public baseFee = 500;        // 0.05%
@@ -80,50 +80,37 @@ contract DeploySimpleQuoter is Script, Utils {
         require(quoterProxyAdminAddr != ADDR_ZERO, "Quoter AdminChanged event not found");
         console2.log("SimpleQuoter ProxyAdmin deployed at:", quoterProxyAdminAddr);
 
-        // 3. Whitelist the deployer as MM if needed (requires hook owner = deployer)
-        if (!hook.whitelisted(deployer)) {
-            require(hook.owner() == deployer, "Deployer is not hook owner; cannot self-whitelist");
-            console2.log("\n3. Whitelisting deployer as MM...");
-            hook.addToWhitelist(deployer);
-        } else {
-            console2.log("\n3. Deployer already whitelisted as MM.");
-        }
-
-        // 4. Register quoter for the target pool
-        console2.log("\n4. Registering SimpleQuoter for pool...");
+        // 3. Set the new quoter as the pool's default (owner-only on the hook).
+        console2.log("\n3. Setting SimpleQuoter as default quoter for pool...");
+        require(hook.owner() == deployer, "Deployer is not hook owner; cannot set default quoter");
         PoolId[] memory poolIds = new PoolId[](1);
         poolIds[0] = poolId;
         ILPQuoter[] memory quoters = new ILPQuoter[](1);
         quoters[0] = ILPQuoter(address(quoter));
-        hook.registerPools(poolIds, quoters);
+        hook.assignDefaultQuoters(poolIds, quoters);
 
         vm.stopBroadcast();
 
-        // 5. Verify
+        // 4. Verify
         _verify(quoter, poolId);
 
-        // 6. Summary
+        // 5. Summary
         console2.log("\n=== Deployment Summary ===");
         console2.log("SimpleQuoter Implementation:", address(quoterImpl));
         console2.log("SimpleQuoter Proxy:", address(quoterProxy));
         console2.log("SimpleQuoter ProxyAdmin:", quoterProxyAdminAddr);
         console2.log("HyFiHook:", address(hook));
-        console2.log("MM (deployer):", deployer);
-        console2.log("Registered Pool ID:", vm.toString(PoolId.unwrap(poolId)));
+        console2.log("Default-quoter Pool ID:", vm.toString(PoolId.unwrap(poolId)));
 
         console2.log("\nDeployment completed successfully!");
     }
 
     function _verify(SimpleQuoter quoter, PoolId poolId) internal view {
         console2.log("\n=== Deployment Verification ===");
-        require(address(quoter.pm()) == address(pm), "Quoter PoolManager not set correctly");
-        require(quoter.hook() == address(hook), "Quoter hook not set correctly");
+        require(address(quoter.getPm()) == address(pm), "Quoter PoolManager not set correctly");
+        require(quoter.getHook() == address(hook), "Quoter hook not set correctly");
         require(quoter.owner() == owner, "Quoter owner not set correctly");
-        require(hook.whitelisted(deployer), "Deployer not whitelisted");
-        uint count = hook.getMMCount(poolId);
-        require(count >= 1, "Quoter not registered for pool");
-        (address mmAddr, address quoterAddr) = hook.getMM(poolId, count - 1);
-        require(mmAddr == deployer && quoterAddr == address(quoter), "Quoter registration mismatch");
+        require(address(hook.getDefaultQuoter(poolId)) == address(quoter), "Default quoter not set for pool");
         console2.log("All checks passed");
     }
 }
